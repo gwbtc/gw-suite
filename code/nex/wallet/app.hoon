@@ -57,7 +57,9 @@
             kind+s+'app'
             info+s+'Bitcoin SPV wallet'
             color+s+'#f7931a'
-            href+s+'/groundwire/wallet'
+            ::  the tile opens the simple wallet; the full one stays at
+            ::  /groundwire/wallet for anyone who types it
+            href+s+'/groundwire/wallet/simple'
         ==
       =/  icon=mime
         :-  /image/'svg+xml'
@@ -97,6 +99,10 @@
           [%over %& [/ %'groups.json'] [[/ %json] (pairs:enjs:format ~[['/public' (pairs:enjs:format ~[['poke' a+~[s+'/main.sig']]])]])]]
           [%over %& [/ %'tile.json'] [[/ %json] tile]]
           [%over %& [/ %'main.sig'] [[/ %sig] ~]]
+          ::  grant.json: the shell writes it on approval. A reload keeps only
+          ::  what is listed here, so it is listed, or here:sh reads "not
+          ::  approved" after every reload and the UI answers 503 forever.
+          [%stay %& [/ %'grant.json']]
           =/  init-deps=json
             %-  pairs:enjs:format
             :~  contacts+s+'/apps/contacts.desk/desk/data/contacts.contacts'
