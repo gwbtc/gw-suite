@@ -534,7 +534,7 @@
         ;<  [src=@p req=inbound-request:eyre]  bind:m  (get-state-as:io ,[src=@p inbound-request:eyre])
         ;<  our=@p  bind:m  get-our:io
         ?.  =(src our)
-          ;<  ~  bind:m  (send-simple:srv:h eyre-id [[403 ~] `(as-octs:mimes:html 'Forbidden')])
+          ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[403 ~] `(as-octs:mimes:html 'Forbidden')])
           (pure:m ~)
         ::  our own address from grant.json (here:sh), NOT a %here walk —
         ::  the sandbox grants no peek /, so the walk would crash. ~ before
@@ -542,7 +542,7 @@
         ;<  base=(unit @t)  bind:m  (here:sh rail)
         ?~  base
           ;<  ~  bind:m
-            (send-simple:srv:h eyre-id [[503 ~] `(as-octs:mimes:html 'Wallet awaiting sandbox approval')])
+            (send-simple:http-res:io eyre-id [[503 ~] `(as-octs:mimes:html 'Wallet awaiting sandbox approval')])
           (pure:m ~)
         ::  here:sh IS the nexus root (what the old snip-snip of the fiber
         ::  rail recovered) — use it directly.
@@ -637,7 +637,7 @@
           =/  args=key-value-list:kv:html-utils  (parse-body:kv:html-utils body.request.req)
           =/  action=@t  (fall (get-key:kv:html-utils 'action' args) '')
           ?+    action
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Unknown action')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Unknown action')])
               (pure:m ~)
               %'get-receive-address'
             =/  req-net=@t
@@ -645,14 +645,14 @@
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  sa=(unit @t)  (get-simple-account:h lbls req-net)
             ?~  sa
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html '')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html '')])
               (pure:m ~)
             =/  acct-ref=@t  u.sa
             =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
             ;<  wstore=secrets  bind:m  load-secrets:h
             =/  xprv=(unit @t)  (derive-xprv:aio lbls wstore acct-ref)
             ?~  xprv
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Cannot derive key')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Cannot derive key')])
               (pure:m ~)
             =/  stype=script-type  (get-acct-script-type:aio lbls acct-ref)
             =/  recv=(list [@ud address-data])
@@ -672,12 +672,12 @@
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  xpub=(unit @t)  (get-simple-xpub:h lbls)
             ?~  xpub
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  saved=?  (get-simple-saved:h lbls u.xpub)
             =/  new-lbls=labels:b329  (set-simple-saved:h lbls u.xpub !saved)
             ;<  ~  bind:m  (save-labels:h new-lbls)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
               %'refresh-wallet'
             ::  refresh all pending + next-unused addresses
@@ -686,7 +686,7 @@
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  sa=(unit @t)  (get-simple-account:h lbls req-net)
             ?~  sa
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  acct-ref=@t  u.sa
             =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
@@ -781,7 +781,7 @@
             |-
             ?~  refresh-list
               ;<  ~  bind:m  (save-registry:h reg)
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  [chain=?(%recv %chng) idx=@ud]  i.refresh-list
             =/  rkey=@ta  (refresh-key:h chain idx)
@@ -815,7 +815,7 @@
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  sa=(unit @t)  (get-simple-account:h lbls req-net)
             ?~  sa
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  acct-ref=@t  u.sa
             =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
@@ -825,7 +825,7 @@
             =/  acct-procs=account-procs
               (fall (~(get by accounts.reg) acct-ref) *account-procs)
             ?:  (~(has by refresh.acct-procs) rkey)
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             ;<  eny=@uvJ  bind:m  get-entropy:io
             =/  uuid=@ta  (short-id:h eny)
@@ -843,7 +843,7 @@
             =.  refresh.acct-procs  (~(put by refresh.acct-procs) rkey uuid)
             =.  accounts.reg  (~(put by accounts.reg) acct-ref acct-procs)
             ;<  ~  bind:m  (save-registry:h reg)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
               %'send-bitcoin'
             ::  Build, sign, and broadcast a transaction
@@ -859,13 +859,13 @@
             =/  fee-rate=@ud  (fall (rush fee-rate-raw dem) 2)
             ?:  |(=('' address) =(0 amount))
               ;<  ~  bind:m
-                (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Missing address or amount')])
+                (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Missing address or amount')])
               (pure:m ~)
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  sa=(unit @t)  (get-simple-account:h lbls req-net)
             ?~  sa
               ;<  ~  bind:m
-                (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'No account for network')])
+                (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'No account for network')])
               (pure:m ~)
             =/  acct-ref=@t  u.sa
             =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
@@ -873,7 +873,7 @@
             =/  xprv=(unit @t)  (derive-xprv:aio lbls wstore acct-ref)
             ?~  xprv
               ;<  ~  bind:m
-                (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Cannot derive key')])
+                (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Cannot derive key')])
               (pure:m ~)
             =/  stype=script-type  (get-acct-script-type:aio lbls acct-ref)
             ::  derive next change address, label it, advance counter
@@ -896,12 +896,12 @@
               %'rename-wallet'
             =/  new-name=@t  (fall (get-key:kv:html-utils 'name' args) '')
             ?:  =('' new-name)
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Name required')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Name required')])
               (pure:m ~)
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  xpub=(unit @t)  (get-simple-xpub:h lbls)
             ?~  xpub
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  old-name=@t  (get-wallet-name:aio lbls u.xpub)
             =/  old-lbl=@t  (rap 3 ~['gwbtc:wallet:' old-name])
@@ -909,7 +909,7 @@
             =/  new-lbls=labels:b329
               (~(put la:b329 new-lbls) [%xpub u.xpub (rap 3 ~['gwbtc:wallet:' new-name]) ~ ~ ~])
             ;<  ~  bind:m  (save-labels:h new-lbls)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
               %'request-address'
             ::  Request a receive address from another ship
@@ -919,12 +919,12 @@
               (fall (get-key:kv:html-utils 'net' args) 'testnet3')
             ?:  =('' ship-name)
               ;<  ~  bind:m
-                (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Missing ship')])
+                (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Missing ship')])
               (pure:m ~)
             =/  target=(unit @p)  (slaw %p ship-name)
             ?~  target
               ;<  ~  bind:m
-                (send-simple:srv:h eyre-id [[400 ~] `(as-octs:mimes:html 'Invalid ship')])
+                (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'Invalid ship')])
               (pure:m ~)
             ~&  [%wallet %request-address %asking (scow %p u.target) req-net]
             ::  clear old simple:send:active labels
@@ -955,7 +955,7 @@
               [/remote-poke %& /apps/'wallet.wallet_app' %'main.sig']
             ;<  ~  bind:m
               (gall-poke:io [u.target %grubbery] grubbery-load+req)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
               %'offer-status'
             ::  Check if we have a send:active address (from an offer)
@@ -977,7 +977,7 @@
                 [%o (~(gas by *(map @t json)) ~[['status' s+'waiting']])]
               [%o (~(gas by *(map @t json)) ~[['status' s+'ready'] ['address' s+u.active]])]
             ;<  ~  bind:m
-              (send-simple:srv:h eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html body)])
+              (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'application/json']]] `(as-octs:mimes:html body)])
             (pure:m ~)
               %'set-fee-rate'
             =/  fee-raw=@t  (fall (get-key:kv:html-utils 'fee-rate' args) '2')
@@ -986,12 +986,12 @@
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  sa=(unit @t)  (get-simple-account:h lbls req-net)
             ?~  sa
-              ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+              ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
               (pure:m ~)
             =/  acct-ref=@t  u.sa
             =/  new-lbls=labels:b329  (set-simple-fee:h lbls acct-ref fee-val)
             ;<  ~  bind:m  (save-labels:h new-lbls)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
           ==
         ::  route: /w/<wallet-key>/ → wallet detail page
@@ -1006,13 +1006,13 @@
             =/  jon=json  [%o (~(put by ?>(?=(%o -.jon) p.jon)) 'wallet-key' s+wallet-xpub)]
             =/  main-road=road:tarball  (nex-road:h [%& ~ %'main.sig'])
             ;<  ~  bind:m  (poke:io main-road [[/ %json] jon])
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
             (pure:m ~)
           ::  GET → render wallet detail page
           ;<  sec=secrets  bind:m  load-secrets:h
           =/  sd=(unit seed)  (~(get by seeds.sec) wallet-xpub)
           ?~  sd
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Wallet not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Wallet not found')])
             (pure:m ~)
           =/  wal=wallet-data  [u.sd wallet-xpub]
           ;<  lbls=labels:b329  bind:m  load-labels:h
@@ -1029,7 +1029,7 @@
           =/  acct-ref=@t  (acct-ref-from-key:h acct-key)
           ;<  lbls=labels:b329  bind:m  load-labels:h
           ?.  (has-account:aio lbls acct-ref)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
             (pure:m ~)
           =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
           =/  stype=script-type  (get-acct-script-type:aio lbls acct-ref)
@@ -1055,7 +1055,7 @@
           =/  acct-ref=@t  (acct-ref-from-key:h acct-key)
           ;<  lbls=labels:b329  bind:m  load-labels:h
           ?.  (has-account:aio lbls acct-ref)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
             (pure:m ~)
           =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
           =/  stype=script-type  (get-acct-script-type:aio lbls acct-ref)
@@ -1095,7 +1095,7 @@
           =/  acct-ref=@t  (acct-ref-from-key:h acct-key)
           ;<  lbls=labels:b329  bind:m  load-labels:h
           ?.  (has-account:aio lbls acct-ref)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
             (pure:m ~)
           =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
           =/  chain-tag=?(%recv %chng)  ?:(?=(%recv chain) %recv %chng)
@@ -1110,7 +1110,7 @@
             ?:  =(idx -.i.chain-list)  `+.i.chain-list
             $(chain-list t.chain-list)
           ?~  dat
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Address not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Address not found')])
             (pure:m ~)
           =/  akh=tape  (trip i.t.suffix)
           =/  txs=tx-map  (build-acct-tx-map:h lbls acct-ref)
@@ -1123,13 +1123,13 @@
           =/  acct-ref=@t  (acct-ref-from-key:h acct-key)
           ;<  lbls=labels:b329  bind:m  load-labels:h
           ?.  (has-account:aio lbls acct-ref)
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Account not found')])
             (pure:m ~)
           =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
           =/  txs=tx-map  (build-acct-tx-map:h lbls acct-ref)
           =/  tx=(unit transaction)  (~(get by txs) txid)
           ?~  tx
-            ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Transaction not found')])
+            ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Transaction not found')])
             (pure:m ~)
           =/  [recv=(list [@ud address-data]) chng=(list [@ud address-data])]
             (load-recv-chng:h lbls acct-ref)
@@ -1141,7 +1141,7 @@
           ;<  ~  bind:m  (send-html:h eyre-id (tx-detail-page:h u.tx hit-idx hit-chain dat network akh txs))
           (pure:m ~)
         ::  unknown route
-        ;<  ~  bind:m  (send-simple:srv:h eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
+        ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
         (pure:m ~)
           ::
           ::  /proc/*: generic process handler — dispatches on type in state
@@ -2077,7 +2077,6 @@
 ::
 ::  HTTP response helpers — road from /ui/requests/* to /ui/http.sig
 ::
-++  srv  ~(. http-res:io (nex-road [%& /ui %'http.sig']))
 ::
 ++  send-html
   |=  [eyre-id=@ta page=manx]
@@ -2085,7 +2084,7 @@
   ^-  form:m
   =/  bod=@t  (crip (en-xml:html page))
   =/  =octs  (as-octs:mimes:html bod)
-  (send-simple:srv eyre-id [[200 ~[['content-type' 'text/html']]] `octs])
+  (send-simple:http-res:io eyre-id [[200 ~[['content-type' 'text/html']]] `octs])
 ::  +serve-page-html: peek a page.html manx from the ball and serve it
 ::
 ++  serve-page-html
@@ -2095,9 +2094,9 @@
   =/  =road:tarball  (cord-to-road:tarball road-cord)
   ;<  =view:nexus  bind:m  (peek:io road `[/ %mime])
   ?.  ?=([%file *] view)
-    (send-simple:srv eyre-id [[404 ~] `(as-octs:mimes:html 'Page not found')])
+    (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Page not found')])
   =/  =mime  !<(mime (need-vase:tarball sang.view))
-  (send-simple:srv eyre-id (mime-response:http-utils mime))
+  (send-simple:http-res:io eyre-id (mime-response:http-utils mime))
 ::  +acct-ref-from-key: extract pubkey-hex from directory name
 ::
 ++  acct-ref-from-key
@@ -2149,7 +2148,7 @@
     ==
   ?:  =('' addr)
     ;<  ~  bind:m
-      (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html '')])
+      (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html '')])
     (pure:m ~)
   ::  fetch address info from mempool
   =/  base-url=tape  (mempool-base-url:aio vr-net)
@@ -2167,7 +2166,7 @@
   ?.  has-activity
     ::  unused — return it
     ;<  ~  bind:m
-      (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html addr)])
+      (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html addr)])
     (pure:m ~)
   ::  used — try next index
   $(idx +(idx))
@@ -2179,8 +2178,8 @@
   ^-  form:m
   ;<  ok=?  bind:m  (do-send acct-ref dest-addr change-addr amount fee-rate)
   ?.  ok
-    (send-simple:srv eyre-id [[500 ~] `(as-octs:mimes:html 'Send failed')])
-  (send-simple:srv eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
+    (send-simple:http-res:io eyre-id [[500 ~] `(as-octs:mimes:html 'Send failed')])
+  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
 ::
 ++  get-simple-xpub
   |=  =labels:b329
@@ -2592,7 +2591,7 @@
     (pairs:enjs:format ~[['target' s+target] ['html' s+(crip (en-xml:html content))]])
   =/  =sse-event:http-utils  [~ `'fragment' [(en:json:html json)]~]
   =/  data=octs  (sse-encode:http-utils ~[sse-event])
-  (send-data:srv eyre-id `data)
+  (send-data:http-res:io eyre-id `data)
 ::  +send-sse-prepend: prepend a row to a DOM element if rowId doesn't exist
 ::
 ++  send-sse-prepend
@@ -2608,7 +2607,7 @@
     ==
   =/  =sse-event:http-utils  [~ `'fragment' [(en:json:html json)]~]
   =/  data=octs  (sse-encode:http-utils ~[sse-event])
-  (send-data:srv eyre-id `data)
+  (send-data:http-res:io eyre-id `data)
 ::  +send-sse-update: update an existing row by ID (outerHTML replace)
 ::
 ++  send-sse-update
@@ -2624,7 +2623,7 @@
     ==
   =/  =sse-event:http-utils  [~ `'fragment' [(en:json:html json)]~]
   =/  data=octs  (sse-encode:http-utils ~[sse-event])
-  (send-data:srv eyre-id `data)
+  (send-data:http-res:io eyre-id `data)
 ::  +send-addr-rows: prepend new rows, update existing ones in-place
 ::
 ++  send-addr-rows
@@ -2649,9 +2648,9 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?.  (is-sse-request:http-utils req)
-    ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
     (pure:m ~)
-  ;<  ~  bind:m  (send-header:srv eyre-id sse-header:http-utils)
+  ;<  ~  bind:m  (send-header:http-res:io eyre-id sse-header:http-utils)
   ::  watch stores
   =/  lbl-road=road:tarball   (nex-road [%& ~ %'labels.wallet_labels'])
   ;<  *  bind:m  (keep:io /acct-stream lbl-road ~)
@@ -2661,7 +2660,7 @@
   ;<  nw=news-or-wake:io  bind:m  (take-news-or-wake:io /acct-stream)
   ?-    -.nw
       %wake
-    ;<  ~  bind:m  (send-data:srv eyre-id `sse-keep-alive:http-utils)
+    ;<  ~  bind:m  (send-data:http-res:io eyre-id `sse-keep-alive:http-utils)
     ;<  now=@da  bind:m  get-time:io
     ;<  ~  bind:m  (send-wait:io (add now ~s30))
     $
@@ -2679,7 +2678,7 @@
       ?~  next-addr  (pure:m ~)
       =/  =sse-event:http-utils  [~ `'receive-addr' [u.next-addr]~]
       =/  data=octs  (sse-encode:http-utils ~[sse-event])
-      (send-data:srv eyre-id `data)
+      (send-data:http-res:io eyre-id `data)
     ;<  ~  bind:m
       (send-sse-fragment eyre-id 'account-summary-wrap' (account-summary-ui:acct-ui recv chng))
     ;<  ~  bind:m  (send-addr-rows eyre-id s-ref s-net %recv recv now)
@@ -2693,9 +2692,9 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?.  (is-sse-request:http-utils req)
-    ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
     (pure:m ~)
-  ;<  ~  bind:m  (send-header:srv eyre-id sse-header:http-utils)
+  ;<  ~  bind:m  (send-header:http-res:io eyre-id sse-header:http-utils)
   =/  lbl-road=road:tarball    (nex-road [%& ~ %'labels.wallet_labels'])
   =/  draft-road=road:tarball  (nex-road [%& ~ %'drafts.wallet_drafts'])
   ;<  *  bind:m  (keep:io /send-stream lbl-road ~)
@@ -2706,7 +2705,7 @@
   ;<  nw=news-or-wake:io  bind:m  (take-news-or-wake:io /send-stream)
   ?-    -.nw
       %wake
-    ;<  ~  bind:m  (send-data:srv eyre-id `sse-keep-alive:http-utils)
+    ;<  ~  bind:m  (send-data:http-res:io eyre-id `sse-keep-alive:http-utils)
     ;<  now=@da  bind:m  get-time:io
     ;<  ~  bind:m  (send-wait:io (add now ~s30))
     $
@@ -2784,9 +2783,9 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?.  (is-sse-request:http-utils req)
-    ;<  ~  bind:m  (send-simple:srv eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
+    ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[400 ~] `(as-octs:mimes:html 'SSE only')])
     (pure:m ~)
-  ;<  ~  bind:m  (send-header:srv eyre-id sse-header:http-utils)
+  ;<  ~  bind:m  (send-header:http-res:io eyre-id sse-header:http-utils)
   ::  watch labels
   =/  lbl-road=road:tarball   (nex-road [%& ~ %'labels.wallet_labels'])
   ;<  *  bind:m  (keep:io /addr-stream lbl-road ~)
@@ -2796,7 +2795,7 @@
   ;<  nw=news-or-wake:io  bind:m  (take-news-or-wake:io /addr-stream)
   ?-    -.nw
       %wake
-    ;<  ~  bind:m  (send-data:srv eyre-id `sse-keep-alive:http-utils)
+    ;<  ~  bind:m  (send-data:http-res:io eyre-id `sse-keep-alive:http-utils)
     ;<  now=@da  bind:m  get-time:io
     ;<  ~  bind:m  (send-wait:io (add now ~s30))
     $
