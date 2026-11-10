@@ -525,7 +525,7 @@
         ;<  ~  bind:m  (rise-wait:io prod "%wallet /ui/http: failed")
         =/  prefix=path  /groundwire/wallet
         ;<  ~  bind:m  (bind-http-self:io [~ prefix])
-        (http-dispatch:io %wallet)
+        http-dispatch:io
           ::  /ui/requests/*: individual HTTP request handlers
           ::
           [[%ui %requests ~] @]
