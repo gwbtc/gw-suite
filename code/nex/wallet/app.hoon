@@ -28,14 +28,6 @@
     ++  on-load
       |=  =ball:tarball
       ^-  bole:tarball
-      ~&  >>  [%wallet-on-load %proc-in-old-ball ?=(^ (~(dap ba:tarball ball) /proc))]
-      ~&  >>  [%wallet-on-load %registry-in-old-ball ?=(^ (~(get ba:tarball ball) [/ %'registry.wallet_registry']))]
-      ~&  >>  [%wallet-on-load %dir-keys ~(key by dir.ball)]
-      ~&  >>>  :*  %wallet-bundle-debug
-                  root-files=?~(fil.bundle 0 ~(wyt by u.fil.bundle))
-                  dir-keys=~(key by dir.bundle)
-              ==
-      ~&  >>>  [%seed-check sb-dirs=~(key by dir:(seed-tools:tools bundle))]
       =/  init-lbls=labels:b329  *labels:b329
       =/  init-sec=secrets  *secrets
       =/  tile=json
