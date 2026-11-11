@@ -134,8 +134,30 @@
 ++  label-utxos
   |=  [=labels:b329 addr=@t utxos=(list utxo)]
   ^-  labels:b329
+  ::  the fresh list is the whole truth for this address: an output we
+  ::  hold for it that is not in the list was spent, and is marked so.
+  ::  Deleting it would not do: +label-txs writes every output of every
+  ::  transaction again, and the transaction list is capped, so the spend
+  ::  itself may never be seen. +read-utxos skips what is marked spent.
+  =/  fresh=(set @t)
+    %-  ~(gas in *(set @t))
+    (turn utxos |=(u=utxo (rap 3 ~[txid.u ':' (num vout.u)])))
+  =.  labels
+    =/  held=(list @t)
+      %+  murn  ~(tap by output.labels)
+      |=  [ref=@t *]
+      ^-  (unit @t)
+      =/  out-addr=(unit @t)  (~(read-kv la:b329 labels) %output ref 'gwbtc:addr:')
+      ?.  &(?=(^ out-addr) =(addr u.out-addr))  ~
+      ?:  (~(has in fresh) ref)  ~
+      `ref
+    |-
+    ?~  held  labels
+    $(held t.held, labels (~(put-kv la:b329 labels) [%output i.held 'gwbtc:spent:1' ~ ~ ~]))
+  |-
   ?~  utxos  labels
   =/  ref=@t  (rap 3 ~[txid.i.utxos ':' (num vout.i.utxos)])
+  =.  labels  (~(del la:b329 labels) %output ref 'gwbtc:spent:1')
   =.  labels  (~(put-kv la:b329 labels) [%output ref (rap 3 ~['gwbtc:value:' (num value.i.utxos)]) ~ ~ ~])
   =.  labels  (~(put-kv la:b329 labels) [%output ref (rap 3 ~['gwbtc:addr:' addr]) ~ ~ ~])
   =.  labels
@@ -268,8 +290,10 @@
   ::  check if this output belongs to our address
   =/  out-addr=(unit @t)  (~(read-kv la:b329 labels) %output ref 'gwbtc:addr:')
   ?.  &(?=(^ out-addr) =(addr u.out-addr))  ~
-  ::  skip if spent (input label exists for this outpoint)
+  ::  skip if spent: an input label for this outpoint, or marked by
+  ::  +label-utxos when a fresh utxo list no longer had it
   ?.  =(~ (~(get la:b329 labels) %input ref))  ~
+  ?^  (~(read-kv la:b329 labels) %output ref 'gwbtc:spent:')  ~
   ::  parse ref as txid:vout
   =/  colon=(unit @ud)  (find ":" (trip ref))
   ?~  colon  ~
@@ -761,6 +785,18 @@
   `[u.txid inputs outputs status fee size]
 ::  +scan-chain: derive addresses and scan chain for activity
 ::
+::  +wallet-road: a road to a lane in the wallet nexus, wherever it
+::  lives, by its name: /sys/link/wallet says where @wallet is. Works
+::  from the wallet's own procs and from its tools nexus alike. Crashes
+::  the caller when no wallet is linked: nothing here can run without one.
+::
+++  wallet-road
+  |=  =lane:tarball
+  =/  m  (fiber:fiber:nexus ,road:tarball)
+  ^-  form:m
+  ;<  road=(unit road:tarball)  bind:m  (resolve-link-at:io '@wallet' lane)
+  ?~  road  ~|(%no-wallet-linked !!)
+  (pure:m u.road)
 ++  scan-chain
   |=  $:  acct-ref=@t
           chain=?(%receiving %change)
@@ -793,7 +829,7 @@
   ::  read back the derived address from labels
   ;<  lbls=labels:b329  bind:m
     =/  lm  (fiber:fiber:nexus ,labels:b329)
-    =/  lbl-road=road:tarball  [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels']
+    ;<  lbl-road=road:tarball  bind:lm  (wallet-road [%& / %'labels.wallet_labels'])
     ;<  lbl-view=view:nexus  bind:lm  (peek:io lbl-road ~)
     ?.  ?=([%file *] lbl-view)  (pure:lm *labels:b329)
     (pure:lm (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329))
@@ -834,14 +870,14 @@
   ::  active address — label and save
   ;<  fresh-lbls=labels:b329  bind:m
     =/  lm  (fiber:fiber:nexus ,labels:b329)
-    =/  lbl-road=road:tarball  [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels']
+    ;<  lbl-road=road:tarball  bind:lm  (wallet-road [%& / %'labels.wallet_labels'])
     ;<  lbl-view=view:nexus  bind:lm  (peek:io lbl-road ~)
     ?.  ?=([%file *] lbl-view)  (pure:lm *labels:b329)
     (pure:lm (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329))
   =/  fresh-lbls=labels:b329  (label-addr-info fresh-lbls u.addr u.new-info)
   =/  fresh-lbls=labels:b329  (label-utxos fresh-lbls u.addr utxos)
   =/  fresh-lbls=labels:b329  (label-txs fresh-lbls txs)
-  =/  lbl-road=road:tarball  [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels']
+  ;<  lbl-road=road:tarball  bind:m  (wallet-road [%& / %'labels.wallet_labels'])
   ;<  ~  bind:m  (over:io lbl-road [[/wallet %labels] fresh-lbls])
   $(scan-idx +(scan-idx), gap 0)
 ::

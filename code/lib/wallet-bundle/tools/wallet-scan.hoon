@@ -1,6 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
-/<  aio    /lib/wallet/account-io.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-scan: run a full address scan on a wallet account
 ::
@@ -32,8 +32,8 @@
   =/  ref=@ta
     (~(dog jo:json-utils [%o args.st]) /account so:dejs:format)
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)
@@ -45,14 +45,12 @@
   ;<  eny=@uvJ  bind:m  get-entropy:io
   =/  uuid=@ta  (scot %uv eny)
   ~&  >  [%mcp-scan %start ref uuid]
-  =/  proc-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app'/proc (cat 3 uuid '.json')]
+  ;<  proc-road=road:tarball  bind:m  (wallet-road:aio [%& /proc (cat 3 uuid '.json')])
   ::  subscribe FIRST
   ;<  *  bind:m  (keep:io /scan-proc proc-road ~)
   ~&  >  [%mcp-scan %subscribed]
   ::  poke main.sig to start the scan with our uuid
-  =/  main-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'main.sig']
+  ;<  main-road=road:tarball  bind:m  (wallet-road:aio [%& / %'main.sig'])
   ;<  ~  bind:m
     %:  poke:io  main-road
       :-  [/ %json]
@@ -80,8 +78,8 @@
   ;<  ~  bind:m  (drop:io /scan-proc proc-road)
     =/  net=@ta  ;;(@ta network)
     ::  reload labels (scan may have written new ones)
-    ;<  lbl-view2=view:nexus  bind:m
-      (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+    ;<  lbl-view2-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+    ;<  lbl-view2=view:nexus  bind:m  (peek:io lbl-view2-road ~)
     =/  lbls2=labels:b329
       ?.  ?=([%file *] lbl-view2)  *labels:b329
       (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view2)))) *labels:b329)

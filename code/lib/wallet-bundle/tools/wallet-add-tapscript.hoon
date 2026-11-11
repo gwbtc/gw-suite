@@ -1,6 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
-/<  aio    /lib/wallet/account-io.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-add-tapscript: attach a script tree to a p2tr address
 ::
@@ -58,8 +58,7 @@
   ?~  tree-json
     (pure:m [%error 'Failed to parse tree JSON'])
   ::  poke main.sig
-  =/  main-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'main.sig']
+  ;<  main-road=road:tarball  bind:m  (wallet-road:aio [%& / %'main.sig'])
   =/  chain-ud=@ud  (fall (rush chain dem) 0)
   =/  idx-ud=@ud  (fall (rush idx dem) 0)
   ;<  ~  bind:m

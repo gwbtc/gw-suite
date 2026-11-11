@@ -1,5 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
+/<  aio    /lib/wallet/accountio.hoon
 ::  wallet-request-address: ask another ship for a receive address
 ::
 ::  Sends an address-request poke to the target ship, then
@@ -39,8 +40,7 @@
   =/  net=?(%main %testnet3 %testnet4 %signet %regtest)
     ;;(?(%main %testnet3 %testnet4 %signet %regtest) net-raw)
   ::  snapshot offer-log length before requesting
-  =/  log-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'offer-log.json']
+  ;<  log-road=road:tarball  bind:m  (wallet-road:aio [%& / %'offer-log.json'])
   ;<  log-view=view:nexus  bind:m  (peek:io log-road ~)
   =/  cur-len=@ud
     ?.  ?=([%file *] log-view)  0
@@ -56,9 +56,11 @@
     :~  ['action' s+'address-request']
         ['network' s+net-raw]
     ==
+  ;<  far=(unit lane:tarball)  bind:m  (resolve-link-on:io target '@wallet')
+  ?.  ?=([~ %| *] far)  (pure:m [%error 'that ship has no wallet we can see'])
   =/  req=load:remo:nexus
     :_  [%poke [[/ %json] jon]]
-    [/remote-poke %& /apps/'wallet.wallet_app' %'main.sig']
+    [/remote-poke %& p.u.far %'main.sig']
   ;<  ~  bind:m
     (gall-poke:io [target %grubbery] grubbery-load+req)
   ::  set timeout

@@ -8,7 +8,7 @@
 /<  seed-phrases  /lib/seed-phrases.hoon
 /<  bech32        /lib/bech32.hoon
 /<  acct-ui       /lib/wallet-account-ui.hoon
-/<  aio           /lib/wallet/account-io.hoon
+/<  aio           /lib/wallet/accountio.hoon
 /<  fees          /lib/tx/fees.hoon
 /<  utxo-sel      /lib/tx/select.hoon
 /<  txb           /lib/tx/build.hoon
@@ -36,21 +36,8 @@
                   dir-keys=~(key by dir.bundle)
               ==
       ~&  >>>  [%seed-check sb-dirs=~(key by dir:(seed-tools:tools bundle))]
-      =/  [wal=wallet-data mxpub1=@t ref1=@t xprv1=@t net1=network:wt st1=script-type og1=parsed-origin:b329]
-        (make-dev-wallet 'Dev Wallet' [%t 'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about'] %testnet4)
-      =/  [fau-wal=wallet-data mxpub2=@t ref2=@t xprv2=@t net2=network:wt st2=script-type og2=parsed-origin:b329]
-        (make-dev-wallet 'Fauceted Wallet' [%t 'injury idea term fox crop movie type critic hello inquiry lottery agree'] %testnet3)
-      =/  init-lbls=labels:b329
-        =/  l=labels:b329  *labels:b329
-        =.  l  (~(put la:b329 l) [%xpub mxpub1 (rap 3 ~['gwbtc:wallet:' 'Dev Wallet']) ~ ~ ~])
-        =.  l  (~(put la:b329 l) [%xpub mxpub2 (rap 3 ~['gwbtc:wallet:' 'Fauceted Wallet']) ~ ~ ~])
-        =.  l  (make-acct-labels:aio l ref1 'Default' net1 og1)
-        (make-acct-labels:aio l ref2 'Default' net2 og2)
-      =/  init-sec=secrets
-        :*  %-  ~(gas by *(map @t seed))
-            ~[[xpub.wal seed.wal] [xpub.fau-wal seed.fau-wal]]
-            *(map @t @t)
-        ==
+      =/  init-lbls=labels:b329  *labels:b329
+      =/  init-sec=secrets  *secrets
       =/  tile=json
         %-  pairs:enjs:format
         :~  title+s+'Wallet'
@@ -77,17 +64,23 @@
             :-  %a
             :~  (line '/sys/bowl.sig' 'entropy for key generation and the current time/ship')
                 (line '/sys/eyre/' 'bind /groundwire/wallet and serve the wallet UI')
+                (line '/sys/iris/' 'read balances, utxos and transactions from mempool.space, and broadcast there')
+                (line '/sys/behn/' 'pace scans and refreshes, and keep the live pages open')
             ==
             :-  'peek'
             :-  %a
             :~  (line '@contacts' 'read the contacts it integrates with, resolved by alias (labels/overlays)')
+                (line '/sys/link/' 'find itself by name, @wallet, from its procs and its tools')
             ==
         ==
+      ::  tools added at runtime survive a reload: only /code/lib/tools of
+      ::  the old tree is kept, so a lib the bundle no longer ships does not
+      ::  live on in the tools nexus for ever
       =/  existing-tools=bole:tarball
-        =/  sub=(unit ball:tarball)  (~(dap ba:tarball ball) /'tools.tools'/code)
+        =/  sub=(unit ball:tarball)  (~(dap ba:tarball ball) /'tools.tools'/code/lib/tools)
         ?~  sub  *bole:tarball
-        =/  code-bole=bole:tarball  (ball-to-bole:tarball u.sub)
-        [`[`[/ %tools] ~ %.n ~] (malt ~[[%code code-bole]])]
+        =/  tools-bole=bole:tarball  (ball-to-bole:tarball u.sub)
+        [`[`[/ %tools] ~ %.n ~] (malt ~[[%code `bole:tarball`[~ (malt ~[[%lib `bole:tarball`[~ (malt ~[[%tools tools-bole]])]]])]]])]
       %+  spin:loader  ball
       :~  (manifest:loader 0)
           [%over %| /'tools.tools' (merge-boles:tools existing-tools (seed-tools:tools bundle))]
@@ -114,6 +107,7 @@
           [%fall %& [/ %'ptsts.wallet_ptsts'] [[/wallet %ptsts] *(map @t ptst:taproot)]]
           [%fall %& [/ %'registry.wallet_registry'] [[/wallet %registry] *proc-registry]]
           [%fall %| /proc empty-dir:loader]
+          [%fall %& [/ %'offer-log.json'] [[/ %json] [%a ~]]]            ::  addresses offered to us by other ships
           ::  wallet's own tools nexus instance — runs wallet_* tools
           ::  under wallet's weir (keys never leave). mcp delegates here.
           ::  mounted above via %over + merge-boles; do NOT re-declare it
@@ -401,9 +395,11 @@
                   ['address' s+u.addr]
                   ['network' s+req-net]
               ==
+            ;<  far=(unit lane:tarball)  bind:m  (resolve-link-on:io u.src '@wallet')
+            ?.  ?=([~ %| *] far)  $
             =/  req=load:remo:nexus
               :_  [%poke [[/ %json] offer-jon]]
-              [/remote-poke %& /apps/'wallet.wallet_app' %'main.sig']
+              [/remote-poke %& p.u.far %'main.sig']
             ;<  ~  bind:m
               (gall-poke:io [u.src %grubbery] grubbery-load+req)
             $
@@ -442,8 +438,7 @@
               (~(put la:b329 new-lbls) [%addr addr 'simple:send:active' ~ ~ ~])
             ;<  ~  bind:m  (save-labels:h new-lbls)
             ::  append to offer log
-            =/  log-road=road:tarball
-              [%& %& /apps/'wallet.wallet_app' %'offer-log.json']
+            ;<  log-road=road:tarball  bind:m  (wallet-road:aio [%& / %'offer-log.json'])
             ;<  log-view=view:nexus  bind:m  (peek:io log-road ~)
             =/  cur-log=json
               ?.  ?=([%file *] log-view)  [%a ~]
@@ -667,7 +662,7 @@
               ?:  =(0 tx-count.u.info.dat)  lidx
               $(recv t.recv)
             ::  verify against mempool, advance if used
-            (verify-receive-addr:h u.xprv stype network recv candidate-idx eyre-id)
+            (verify-receive-addr:h acct-ref u.xprv stype network recv candidate-idx eyre-id)
               %'toggle-saved'
             ;<  lbls=labels:b329  bind:m  load-labels:h
             =/  xpub=(unit @t)  (get-simple-xpub:h lbls)
@@ -950,9 +945,12 @@
               :~  ['action' s+'address-request']
                   ['network' s+req-net]
               ==
+            ;<  far=(unit lane:tarball)  bind:m  (resolve-link-on:io u.target '@wallet')
+            ?.  ?=([~ %| *] far)
+              (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'that ship has no wallet we can see')])
             =/  req=load:remo:nexus
               :_  [%poke [[/ %json] req-jon]]
-              [/remote-poke %& /apps/'wallet.wallet_app' %'main.sig']
+              [/remote-poke %& p.u.far %'main.sig']
             ;<  ~  bind:m
               (gall-poke:io [u.target %grubbery] grubbery-load+req)
             ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html 'ok')])
@@ -1047,7 +1045,7 @@
           =/  wal-name=@t  ?:(=('' wallet-xpub) '' (get-wallet-name:aio lbls wallet-xpub))
           ;<  sec=secrets  bind:m  load-secrets:h
           =/  can-sign=?  ?|(?=(^ og) (~(has by xprvs.sec) acct-ref))
-          ;<  ~  bind:m  (send-html:h eyre-id (detail-page:acct-ui acct-name (trip acct-ref) wallet-xpub network stype recv chng now scan progress ~ wal-name can-sign))
+          ;<  ~  bind:m  (send-html:h eyre-id (detail-page:acct-ui nexus-root acct-name (trip acct-ref) wallet-xpub network stype recv chng now scan progress ~ wal-name can-sign))
           (pure:m ~)
         ::  route: /a/<account-key>/send → send page
         ?:  ?=([%a @ %send ~] suffix)
@@ -1069,7 +1067,7 @@
           ;<  now=@da  bind:m  get-time:io
           ;<  dr=(unit transaction:drft)  bind:m  (load-draft:h acct-ref)
           =/  wal-name=@t  ?:(=('' wallet-xpub) '' (get-wallet-name:aio lbls wallet-xpub))
-          ;<  ~  bind:m  (send-html:h eyre-id (send-page:acct-ui acct-name (trip acct-ref) network stype recv chng dr now wal-name))
+          ;<  ~  bind:m  (send-html:h eyre-id (send-page:acct-ui nexus-root acct-name (trip acct-ref) network stype recv chng dr now wal-name))
           (pure:m ~)
         ::  route: /a/<account-key>/send/stream → SSE for send page
         ?:  ?=([%a @ %send %stream ~] suffix)
@@ -1138,7 +1136,7 @@
           =/  akh=tape  (trip i.t.suffix)
           =/  [hit-idx=@ud hit-chain=?(%recv %chng) dat=address-data]
             (fall hit [0 %recv *address-data])
-          ;<  ~  bind:m  (send-html:h eyre-id (tx-detail-page:h u.tx hit-idx hit-chain dat network akh txs))
+          ;<  ~  bind:m  (send-html:h eyre-id (tx-detail-page:h nexus-root u.tx hit-idx hit-chain dat network akh txs))
           (pure:m ~)
         ::  unknown route
         ;<  ~  bind:m  (send-simple:http-res:io eyre-id [[404 ~] `(as-octs:mimes:html 'Not found')])
@@ -1621,8 +1619,8 @@
       (~(dug jo:json-utils jon) /chain so:dejs:format 'recv')
     =/  idx=@ud
       (~(dug jo:json-utils jon) /index ni:dejs:format 0)
-    =/  chain-tag=?(%recv %chng)
-      ?:(?=(%recv ;;(?(%recv %chng) (slav %tas chain))) %recv %chng)
+    =/  chain-tag=?(%recv %chng)                                       ::  'chng' or 'change' is change, anything else receiving
+      ?:(|(=('chng' chain) =('change' chain)) %chng %recv)
     ::  find the address at this index and delete its labels
     =/  rc  (load-recv-chng lbls acct-ref)
     =/  chain-list=(list [@ud address-data])
@@ -2068,9 +2066,11 @@
         ['address' s+addr]
         ['txid' s+txid]
     ==
+  ;<  far=(unit lane:tarball)  bind:m  (resolve-link-on:io u.ship '@wallet')
+  ?.  ?=([~ %| *] far)  $(out-addrs t.out-addrs)
   =/  req=load:remo:nexus
     :_  [%poke [[/ %json] notify-jon]]
-    [/remote-poke %& /apps/'wallet.wallet_app' %'main.sig']
+    [/remote-poke %& p.u.far %'main.sig']
   ;<  ~  bind:m
     (gall-poke:io [u.ship %grubbery] grubbery-load+req)
   $(out-addrs t.out-addrs)
@@ -2123,7 +2123,8 @@
 ::  +verify-receive-addr: live-check addr against mempool, advance if used
 ::
 ++  verify-receive-addr
-  |=  $:  vr-xprv=@t
+  |=  $:  acct-ref=@t
+          vr-xprv=@t
           vr-stype=script-type
           vr-net=network:wt
           recv=(list [@ud address-data])
@@ -2132,6 +2133,10 @@
       ==
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ::  past the gap limit beyond what we track: give up rather than walk
+  ::  mempool.space for ever inside one request
+  ?:  (gth idx (add 20 (lent recv)))
+    (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html '')])
   ::  get or derive address at idx
   =/  dat=(unit address-data)
     |-
@@ -2164,7 +2169,12 @@
     ?~  info  %.n
     (gth tx-count.u.info 0)
   ?.  has-activity
-    ::  unused — return it
+    ::  unused: ours from now on, so the wallet tracks what lands on it
+    ;<  ~  bind:m
+      ?^  dat  (pure:m ~)
+      ;<  lbls=labels:b329  bind:m  load-labels
+      =/  acct-og=(unit parsed-origin:b329)  (get-acct-origin:aio lbls acct-ref)
+      (save-labels (label-derived-addr:aio lbls addr '' acct-og 0 idx acct-ref))
     ;<  ~  bind:m
       (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html addr)])
     (pure:m ~)
@@ -2964,7 +2974,7 @@
         ==
       ==
       ;script
-        ;+  ;/  (addr-script-text akh (trip chain-tag) (scow %ud idx))
+        ;+  ;/  (addr-script-text nexus-root akh (trip chain-tag) (scow %ud idx))
       ==
     ==
   ==
@@ -3117,7 +3127,7 @@
 ::  +tx-detail-page: render transaction detail from inline data
 ::
 ++  tx-detail-page
-  |=  [tx=transaction addr-idx=@ud addr-chain=?(%recv %chng) dat=address-data tx-net=network:wt akh=tape txs=tx-map]
+  |=  [nexus-root=tape tx=transaction addr-idx=@ud addr-chain=?(%recv %chng) dat=address-data tx-net=network:wt akh=tape txs=tx-map]
   ^-  manx
   =/  txid-text=tape  (trip txid.tx)
   =/  confirmed=?  ?=(%confirmed -.tx-status.tx)
@@ -3153,7 +3163,7 @@
       ;div(style "min-width: 650px; height: 100%;")
         ;div.fc.g3.p5.ma.mw-page(style "height: 100%; overflow-y: auto;")
           ;script
-            ;+  ;/  tx-script-text
+            ;+  ;/  (tx-script-text nexus-root)
           ==
           ;a.hover.pointer(id "back-link", href "#", onclick "goBackToAddr(); return false;", style "color: var(--f3); text-decoration: none;"): ← Back to Address
           ;div(style "display: flex; align-items: center; gap: 8px;")
@@ -3325,6 +3335,7 @@
   """
 ::
 ++  tx-script-text
+  |=  nexus-root=tape
   ^-  tape
   """
   var path = window.location.pathname;
@@ -3344,11 +3355,11 @@
   """
 ::
 ++  addr-script-text
-  |=  [acct-ref=tape chain=tape idx=tape]
+  |=  [nexus-root=tape acct-ref=tape chain=tape idx=tape]
   ^-  tape
   """
   var API = '/grubbery/api';
-  var mainSig = 'apps/wallet.wallet_app/main.sig';
+  var mainSig = '{nexus-root}/main.sig';
   var acctRef = '{acct-ref}';
 
   function goBack() \{
@@ -3366,7 +3377,7 @@
   }
 
   function doRefresh() \{
-    var url = API + '/poke/' + mainSig + '?blot=/json';
+    var url = API + '/poke' + mainSig + '?blot=/json';
     fetch(url, \{
       method: 'POST',
       headers: \{'Content-Type': 'application/json'},

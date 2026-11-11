@@ -712,11 +712,11 @@
   """
 ::
 ++  script-text
-  |=  [network=?(%main %testnet3 %testnet4 %signet %regtest) acct-ref=tape acct-hex=tape]
+  |=  [nexus-root=tape network=?(%main %testnet3 %testnet4 %signet %regtest) acct-ref=tape acct-hex=tape]
   ^-  tape
   """
   var API = '/grubbery/api';
-  var mainSig = 'apps/wallet.wallet_app/main.sig';
+  var mainSig = '{nexus-root}/main.sig';
   var acctRef = '{acct-hex}';
   var activeNetwork = '{(trip ;;(@ta network))}';
   var activeTab = 'receiving';
@@ -752,7 +752,7 @@
 
   function acctPoke(body, cb) \{
     body.account = acctRef;
-    var url = API + '/poke/' + mainSig + '?blot=/json';
+    var url = API + '/poke' + mainSig + '?blot=/json';
     return fetch(url, \{
       method: 'POST',
       headers: \{'Content-Type': 'application/json'},
@@ -880,18 +880,18 @@
   """
 ::
 ++  send-scripts-ui
-  |=  [next-chg-tape=tape acct-ref=tape key-hex=tape]
+  |=  [nexus-root=tape next-chg-tape=tape acct-ref=tape key-hex=tape]
   ^-  manx
   =/  js=tape
     """
     var API = '/grubbery/api';
-    var mainSig = 'apps/wallet.wallet_app/main.sig';
+    var mainSig = '{nexus-root}/main.sig';
     var acctRef = '{acct-ref}';
     var changeAddress = '{next-chg-tape}';
 
     function poke(action, extra) \{
       var body = Object.assign(\{action: action, account: acctRef}, extra || \{});
-      var url = API + '/poke/' + mainSig + '?blot=/json';
+      var url = API + '/poke' + mainSig + '?blot=/json';
       return fetch(url, \{
         method: 'POST',
         headers: \{'Content-Type': 'application/json'},
@@ -974,7 +974,7 @@
   ==
 ::
 ++  detail-page
-  |=  [acct-name=@t key-hex=tape wallet-xpub=@t network=network:wt stype=script-type recv=(list [@ud address-data]) chng=(list [@ud address-data]) now=@da scan=?(%active %paused %none) progress=(unit scan-progress) rfsh=(set (pair ?(%recv %chng) @ud)) wal-name=@t can-sign=?]
+  |=  [nexus-root=tape acct-name=@t key-hex=tape wallet-xpub=@t network=network:wt stype=script-type recv=(list [@ud address-data]) chng=(list [@ud address-data]) now=@da scan=?(%active %paused %none) progress=(unit scan-progress) rfsh=(set (pair ?(%recv %chng) @ud)) wal-name=@t can-sign=?]
   ^-  manx
   ;html
     ;head
@@ -1046,13 +1046,13 @@
         ==
       ==
       ;script
-        ;+  ;/  (script-text network key-hex key-hex)
+        ;+  ;/  (script-text nexus-root network key-hex key-hex)
       ==
     ==
   ==
 ::
 ++  send-page
-  |=  [acct-name=@t key-hex=tape network=network:wt stype=script-type recv=(list [@ud address-data]) chng=(list [@ud address-data]) dr=(unit transaction:drft) now=@da wal-name=@t]
+  |=  [nexus-root=tape acct-name=@t key-hex=tape network=network:wt stype=script-type recv=(list [@ud address-data]) chng=(list [@ud address-data]) dr=(unit transaction:drft) now=@da wal-name=@t]
   ^-  manx
   =/  fi=fee-calc  (compute-fee-info dr)
   =/  utxos=(list [addr=@t u=utxo chain=?(%recv %chng) idx=@ud])
@@ -1165,7 +1165,7 @@
           ==
         ==
       ==
-      ;+  (send-scripts-ui next-chg-tape key-hex key-hex)
+      ;+  (send-scripts-ui nexus-root next-chg-tape key-hex key-hex)
     ==
   ==
 --

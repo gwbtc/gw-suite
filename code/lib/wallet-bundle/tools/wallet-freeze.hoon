@@ -1,5 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-freeze: freeze or thaw a UTXO (set spendable flag)
 ::
@@ -43,8 +44,8 @@
     (pure:m [%error 'action must be freeze or thaw'])
   =/  ref=@t  (rap 3 ~[txid ':' vout])
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)
@@ -53,8 +54,7 @@
       (~(freeze la:b329 lbls) ref)
     (~(thaw la:b329 lbls) ref)
   ::  save labels
-  =/  lbl-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels']
+  ;<  lbl-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
   ;<  ~  bind:m
     (over:io lbl-road [[/wallet %labels] new-lbls])
   =/  status=@t  ?:(=(%freeze act) 'frozen (spendable=no)' 'thawed (spendable)')

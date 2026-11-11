@@ -1,6 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
-/<  aio    /lib/wallet/account-io.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-refresh: refresh address data from mempool.space
 ::
@@ -38,8 +38,8 @@
     (~(dug jo:json-utils [%o args.st]) /index so:dejs:format '0')
   =/  idx=@ud  (fall (rush idx-raw dem) 0)
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)
@@ -50,13 +50,11 @@
   ::  generate uuid and build proc road
   ;<  eny=@uvJ  bind:m  get-entropy:io
   =/  uuid=@ta  (scot %uv eny)
-  =/  proc-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app'/proc (cat 3 uuid '.json')]
+  ;<  proc-road=road:tarball  bind:m  (wallet-road:aio [%& /proc (cat 3 uuid '.json')])
   ::  subscribe FIRST
   ;<  *  bind:m  (keep:io /refresh-proc proc-road ~)
   ::  poke main.sig to start the refresh with our uuid
-  =/  main-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'main.sig']
+  ;<  main-road=road:tarball  bind:m  (wallet-road:aio [%& / %'main.sig'])
   ;<  ~  bind:m
     %:  poke:io  main-road
       :-  [/ %json]
@@ -82,8 +80,8 @@
     =/  chain-tag=?(%recv %chng)
       ?:(?=(%recv ;;(?(%recv %chng) (slav %tas chain))) %recv %chng)
     ::  reload labels (refresh wrote new data)
-    ;<  lbl-view2=view:nexus  bind:m
-      (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+    ;<  lbl-view2-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+    ;<  lbl-view2=view:nexus  bind:m  (peek:io lbl-view2-road ~)
     =/  lbls2=labels:b329
       ?.  ?=([%file *] lbl-view2)  *labels:b329
       (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view2)))) *labels:b329)

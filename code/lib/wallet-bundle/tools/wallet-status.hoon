@@ -1,6 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
-/<  aio    /lib/wallet/account-io.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 /<  bip32  /lib/bip32.hoon
 ::  wallet-status: list wallets and their accounts with balances
@@ -24,8 +24,8 @@
   =/  m  (fiber:fiber:nexus ,tool-result:tools)
   ^-  form:m
   ::  read secrets
-  ;<  sec-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'secrets.wallet_secrets'] ~)
+  ;<  sec-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'secrets.wallet_secrets'])
+  ;<  sec-view=view:nexus  bind:m  (peek:io sec-view-road ~)
   =/  sec=secrets
     ?.  ?=([%file *] sec-view)  *secrets
     (fall (mole |.(!<(secrets (need-vase:tarball sang.sec-view)))) *secrets)
@@ -33,8 +33,8 @@
   ?~  fps
     (pure:m [%text 'No wallets found.'])
   ::  read labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)
@@ -66,8 +66,6 @@
         (rap 3 ~['    network: ' (scot %tas network)])
         (rap 3 ~['    script: ' (scot %tas stype)])
         (rap 3 ~['    mode: ' mode])
-        ?:  =('' xprv)  '    xprv: (none)'
-        (rap 3 ~['    xprv: ' (end [3 12] xprv) '...'])
     ==
   ::  format wallet sections
   =/  wallet-out=wain

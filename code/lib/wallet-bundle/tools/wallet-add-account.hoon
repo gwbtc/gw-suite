@@ -1,5 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-add-account: add an account to an existing wallet
 ::
@@ -42,8 +43,7 @@
   =/  acct-num=@t
     (~(dug jo:json-utils [%o args.st]) /'account_number' so:dejs:format '0')
   ::  poke main.sig
-  =/  main-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'main.sig']
+  ;<  main-road=road:tarball  bind:m  (wallet-road:aio [%& / %'main.sig'])
   ;<  ~  bind:m
     %:  poke:io  main-road
       :-  [/ %json]

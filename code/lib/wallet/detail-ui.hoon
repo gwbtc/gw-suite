@@ -8,7 +8,7 @@
 /<  wt       /lib/wallet-types.hoon
 /<  bip32    /lib/bip32.hoon
 /<  seed-phrases  /lib/seed-phrases.hoon
-/<  aio      /lib/wallet/account-io.hoon
+/<  aio      /lib/wallet/accountio.hoon
 /<  b329     /lib/bip329.hoon
 =,  wt
 |%

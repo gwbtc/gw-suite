@@ -1,5 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  b329   /lib/bip329.hoon
+/<  aio    /lib/wallet/accountio.hoon
 ::  wallet-labels: show BIP329 labels for the wallet
 ::
 ^-  tool:tools
@@ -29,8 +30,8 @@
   =/  sub-filter=(unit @t)
     (bind (~(get by args.st) 'filter') |=(j=json ?>(?=(%s -.j) p.j)))
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)

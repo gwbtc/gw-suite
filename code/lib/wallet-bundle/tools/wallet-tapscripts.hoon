@@ -1,6 +1,6 @@
 /<  tools    /lib/tools.hoon
 /<  wt       /lib/wallet-types.hoon
-/<  aio      /lib/wallet/account-io.hoon
+/<  aio      /lib/wallet/accountio.hoon
 /<  b329     /lib/bip329.hoon
 /<  taproot  /lib/taproot.hoon
 ::  wallet-tapscripts: list tapscript trees and their addresses
@@ -30,14 +30,14 @@
   =/  parent-filter=@t
     (~(dug jo:json-utils [%o args.st]) /parent so:dejs:format '')
   ::  load ptsts store
-  ;<  ptst-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'ptsts.wallet_ptsts'] ~)
+  ;<  ptst-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'ptsts.wallet_ptsts'])
+  ;<  ptst-view=view:nexus  bind:m  (peek:io ptst-view-road ~)
   =/  sts=(map @t ptst:taproot)
     ?.  ?=([%file *] ptst-view)  *(map @t ptst:taproot)
     (fall (mole |.(!<((map @t ptst:taproot) (need-vase:tarball sang.ptst-view)))) *(map @t ptst:taproot))
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)

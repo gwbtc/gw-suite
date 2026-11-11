@@ -43,7 +43,7 @@ Tapscript-level: `add-tapscript`, `delete-tapscript`
 ## Libraries
 
 - `lib/wallet-types.hoon` -- Type definitions (secrets, seed, wallet-data, script-type, network)
-- `lib/wallet/account-io.hoon` -- Pure helpers for address derivation, label management, account lookups
+- `lib/wallet/accountio.hoon` -- Pure helpers for address derivation, label management, account lookups
 - `lib/wallet-account-ui.hoon` -- Sail rendering for account detail, send page, address rows
 - `lib/bip32.hoon`, `lib/bip39.hoon`, `lib/bech32.hoon` -- Bitcoin key derivation and encoding
 - `lib/bip329.hoon` -- BIP-329 label store with prefix scanning

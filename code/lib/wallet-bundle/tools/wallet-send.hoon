@@ -1,6 +1,6 @@
 /<  tools  /lib/tools.hoon
 /<  wt     /lib/wallet-types.hoon
-/<  aio    /lib/wallet/account-io.hoon
+/<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
 ::  wallet-send: build, sign, and broadcast a bitcoin transaction
 ::
@@ -49,16 +49,16 @@
   ?:  |(=('' dest-addr) =(0 amount))
     (pure:m [%error 'Missing address or amount'])
   ::  load labels
-  ;<  lbl-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'labels.wallet_labels'] ~)
+  ;<  lbl-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'labels.wallet_labels'])
+  ;<  lbl-view=view:nexus  bind:m  (peek:io lbl-view-road ~)
   =/  lbls=labels:b329
     ?.  ?=([%file *] lbl-view)  *labels:b329
     (fall (mole |.(!<(labels:b329 (need-vase:tarball sang.lbl-view)))) *labels:b329)
   ?.  (has-account:aio lbls ref)
     (pure:m [%error 'Account not found'])
   ::  load secrets for xprv derivation
-  ;<  ws-view=view:nexus  bind:m
-    (peek:io [%& %& /apps/'wallet.wallet_app' %'secrets.wallet_secrets'] ~)
+  ;<  ws-view-road=road:tarball  bind:m  (wallet-road:aio [%& / %'secrets.wallet_secrets'])
+  ;<  ws-view=view:nexus  bind:m  (peek:io ws-view-road ~)
   =/  wstore=secrets
     ?.  ?=([%file *] ws-view)  *secrets
     (fall (mole |.(!<(secrets (need-vase:tarball sang.ws-view)))) *secrets)
@@ -92,13 +92,11 @@
   ::  generate uuid and build proc road
   ;<  eny=@uvJ  bind:m  get-entropy:io
   =/  uuid=@ta  (scot %uv eny)
-  =/  proc-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app'/proc (cat 3 uuid '.json')]
+  ;<  proc-road=road:tarball  bind:m  (wallet-road:aio [%& /proc (cat 3 uuid '.json')])
   ::  subscribe FIRST
   ;<  *  bind:m  (keep:io /send-proc proc-road ~)
   ::  poke main.sig with send action
-  =/  main-road=road:tarball
-    [%& %& /apps/'wallet.wallet_app' %'main.sig']
+  ;<  main-road=road:tarball  bind:m  (wallet-road:aio [%& / %'main.sig'])
   ;<  ~  bind:m
     %:  poke:io  main-road
       :-  [/ %json]
