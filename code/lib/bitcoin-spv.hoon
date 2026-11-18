@@ -119,71 +119,52 @@
 ::  position in the resulting atom. This means cut operations must adjust their
 ::  positions accordingly: to extract bytes [pos, pos+len), use (cut 3 [(sub total (add pos len)) len])
 ::
-++  parse-hex-bytes
-  |=  [hex-string=@t expected-bytes=@ud]
-  ^-  @ux
-  =/  parse-byte  |=(pos=@ud (rash (cut 3 [pos 2] hex-string) hex))
-  =/  all-bytes=(list [@ @])
-    %+  turn  (gulf 0 (dec expected-bytes))
-    |=  i=@ud
-    [1 (parse-byte (mul i 2))]
-  (can 3 (flop all-bytes))
-::  +parse-bitcoin-header: Parse 160-char hex string into 80-byte Bitcoin header
-::
-++  parse-bitcoin-header
+++  bytes
   |=  raw-header=@t
-  ^-  @ux
-  =/  hex-length  (lent (trip raw-header))
-  ~|  "Bitcoin header must be exactly 160 hex chars, got {<hex-length>}"
-  ?>  =(hex-length 160)
-  (parse-hex-bytes raw-header 80)
-::  +compute-block-hash: Double SHA256 hash of Bitcoin header
-::
-::  Bitcoin uses double-SHA256 on the 80-byte header. The hash is computed in
-::  big-endian format, then flipped to little-endian for display (which is how
-::  block hashes are conventionally represented in Bitcoin).
+  ^-  hexb
+  =/  b=hexb  (from-cord:hxb:bcu raw-header)
+  ~|  "a bitcoin header is 80 bytes, got {<wid.b>}"
+  ?>  =(80 wid.b)
+  b
+::  +compute-block-hash: double-SHA256 of the 80 bytes, flipped because
+::  a block hash is displayed in the reverse of the order it is made in
 ::
 ++  compute-block-hash
   |=  raw-header=@t
   ^-  @ux
-  =/  bitcoin-header=@ux  (parse-bitcoin-header raw-header)
-  =/  header-hexb=hexb  [80 bitcoin-header]
-  =/  hash-result=hexb  (dsha256:bcu header-hexb)
-  =/  flipped-hash=hexb  (flip:byt:bcu hash-result)
-  dat.flipped-hash
-::  +parse-header-fields: Parse raw header hex into individual fields
+  dat:(flip:byt:bcu (dsha256:bcu (bytes raw-header)))
+::  +parse-header-fields: the six fields of a header, by where they sit.
 ::
-::  Extracts the 6 fields from an 80-byte Bitcoin block header. The header atom
-::  has flipped byte order (see parse-hex-bytes), so cut positions are adjusted.
-::  Hash fields (prev-hash, merkle-root) are stored little-endian in Bitcoin wire
-::  format, so we flip them after extraction to match our big-endian representation.
+::    0   4   version        little-endian number
+::    4  32   prev hash      stored in the reverse of display order
+::   36  32   merkle root    likewise
+::   68   4   timestamp      little-endian number
+::   72   4   bits           little-endian number
+::   76   4   nonce          little-endian number
+::
+::  Every flip here is one the FORMAT asks for, and each is named for
+::  what it is. An earlier version read the fields out of an atom built
+::  from reversed bytes, so each offset had to be written as
+::  (sub 80 (add pos len)) and every field needed a second flip to undo
+::  the first. The numbers never got that second flip, which left bits
+::  byte-swapped -- and a byte-swapped bits makes +bits-to-target read
+::  the exponent off the wrong end and hand back a target no hash can
+::  exceed, so proof of work silently passed everything.
 ::
 ++  parse-header-fields
   |=  raw-header=@t
   ^-  [version=@ud prev-hash=@ux merkle-root=@ux timestamp=@ud bits=@ux nonce=@ud]
-  =/  header=@ux  (parse-bitcoin-header raw-header)
-  ::  Header atom has flipped byte order: byte 0 is at bit position 608-639 (76*8 to 79*8)
-  ::  To extract wire format bytes [pos, pos+len), use: (cut 3 [(sub 80 (add pos len)) len])
-  =/  version-raw=@ux     (cut 3 [(sub 80 4) 4] header)      ::  bytes 0-3   -> pos 76
-  =/  prev-hash-be=@ux    (cut 3 [(sub 80 36) 32] header)     ::  bytes 4-35  -> pos 44
-  =/  merkle-root-be=@ux  (cut 3 [(sub 80 68) 32] header)     ::  bytes 36-67 -> pos 12
-  =/  timestamp-raw=@ux   (cut 3 [(sub 80 72) 4] header)      ::  bytes 68-71 -> pos 8
-  =/  bits-raw=@ux        (cut 3 [(sub 80 76) 4] header)      ::  bytes 72-75 -> pos 4
-  =/  nonce-raw=@ux       (cut 3 [(sub 80 80) 4] header)      ::  bytes 76-79 -> pos 0
-  ::  Flip hash fields to little-endian format
-  =/  prev-hash=@ux    dat:(flip:byt:bcu [32 prev-hash-be])
-  =/  merkle-root=@ux  dat:(flip:byt:bcu [32 merkle-root-be])
-  ::  and flip the four NUMBERS too. Cutting them out of an atom built
-  ::  from flipped bytes leaves each one byte-reversed, which for bits
-  ::  is not a cosmetic bug: +bits-to-target reads the exponent off the
-  ::  top byte, so a reversed 0x17001473 becomes exponent 115 and a
-  ::  target around 2^900 -- larger than any hash, which makes the
-  ::  proof-of-work test pass for anything at all.
-  =/  version=@ud      dat:(flip:byt:bcu [4 version-raw])
-  =/  timestamp=@ud    dat:(flip:byt:bcu [4 timestamp-raw])
-  =/  bits=@ux         dat:(flip:byt:bcu [4 bits-raw])
-  =/  nonce=@ud        dat:(flip:byt:bcu [4 nonce-raw])
-  [version prev-hash merkle-root timestamp bits nonce]
+  =/  b=hexb  (bytes raw-header)
+  =/  at     |=([pos=@ud len=@ud] `hexb`(take:byt:bcu len (drop:byt:bcu pos b)))
+  =/  num    |=(pos=@ud `@ud`dat:(flip:byt:bcu (at pos 4)))
+  =/  hash   |=(pos=@ud `@ux`dat:(flip:byt:bcu (at pos 32)))
+  :*  (num 0)
+      (hash 4)
+      (hash 36)
+      (num 68)
+      `@ux`(num 72)
+      (num 76)
+  ==
 ::  +parse-raw-to-header: Complete raw hex to block-header conversion
 ::
 ++  parse-raw-to-header

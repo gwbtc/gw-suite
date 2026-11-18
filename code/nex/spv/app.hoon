@@ -239,6 +239,20 @@
     ==
   ?~  hed
     |+(crip "block {(a-co:co height)}: fields do not hash to the id given for them")
+  ::  and the numbers we read out of those bytes have to be the numbers
+  ::  the provider said they were. Two independent answers that must
+  ::  agree, which is the check that catches a byte-order mistake on
+  ::  the first block instead of never: a wrong `bits` does not break
+  ::  anything visibly, it just quietly makes proof of work meaningless.
+  =/  said-bits=@ud  (fall (jnum j 'bits') 0)
+  =/  said-time=@ud  (fall (jnum j 'timestamp') 0)
+  =/  said-nonce=@ud  (fall (jnum j 'nonce') 0)
+  ?.  =(said-bits `@ud`bits.u.hed)
+    |+(crip "block {(a-co:co height)}: we read difficulty {(a-co:co `@ud`bits.u.hed)} where the chain service says {(a-co:co said-bits)}")
+  ?.  =(said-time timestamp.u.hed)
+    |+(crip "block {(a-co:co height)}: we read timestamp {(a-co:co timestamp.u.hed)} where the chain service says {(a-co:co said-time)}")
+  ?.  =(said-nonce nonce.u.hed)
+    |+(crip "block {(a-co:co height)}: we read nonce {(a-co:co nonce.u.hed)} where the chain service says {(a-co:co said-nonce)}")
   ::  proof of work, against the target the header itself declares
   =/  [checked=block-header:spv pow=? work=@ud]
     (validate-header-with-hash:spv u.hed `@ux`computed-hash.u.hed)
