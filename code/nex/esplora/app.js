@@ -5,6 +5,7 @@
   var API = '/grubbery/esplora/api/status';
   var statusEl = document.getElementById('status');
   var provBody = document.querySelector('#providers tbody');
+  var priceBody = document.querySelector('#price-table tbody');
   var waitBody = document.querySelector('#waiting tbody');
   var waitCount = document.getElementById('waiting-count');
   var waitNone = document.getElementById('waiting-none');
@@ -29,6 +30,19 @@
       tr.appendChild(td);
       provBody.appendChild(tr);
     });
+  }
+
+  function paintPrice(p) {
+    priceBody.textContent = '';
+    if (!p) return;
+    var tr = el('tr');
+    tr.appendChild(el('td', null, 'price (BTC/USD)'));
+    tr.appendChild(el('td', 'url', p.url));
+    var td = el('td');
+    td.appendChild(el('span', p.configured ? 'pill set' : 'pill',
+      p.configured ? 'config.json' : 'default'));
+    tr.appendChild(td);
+    priceBody.appendChild(tr);
   }
 
   function paintWaiting(rows) {
@@ -58,6 +72,7 @@
       })
       .then(function (d) {
         paintProviders(d.providers || []);
+        paintPrice(d.price);
         paintWaiting(d.waiting || []);
         statusEl.textContent = 'read ' + new Date().toLocaleTimeString();
       })

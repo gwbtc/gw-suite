@@ -56,16 +56,36 @@
   |=  [conf=json =network address=@t sub=tape]
   ^-  @t
   (crip :(weld (base conf network) "/address/" (trip address) sub))
-::  +price-url: what a bitcoin is worth. Not Esplora proper — it is
-::  mempool.space's own extension — so a provider without it simply
-::  fails the fetch and the wallet keeps the last price it had. Always
-::  asked of mainnet: the price of a testnet coin is the same joke
-::  whichever chain you are looking at.
+::  +price-base, +price-url: what a bitcoin is worth, asked of its OWN
+::  provider under config.json's 'price' key.
+::
+::  A price is not chain data and /v1/prices is not Esplora -- it is
+::  mempool.space's own extension, which a self-hosted Esplora will not
+::  serve. Reading it off the mainnet chain provider made one config
+::  value do two jobs: point `main` at your own node, which is the whole
+::  reason that key exists, and the price silently stops with nothing
+::  saying why. Configured apart, self-hosting the chain costs you
+::  nothing here, and a provider that does not answer fails loudly as
+::  itself.
+::
+::  Always asked of mainnet: the price of a testnet coin is the same
+::  joke whichever chain you are looking at.
+::
+++  default-price-base  "https://mempool.space/api"
+::
+++  price-base
+  |=  conf=json
+  ^-  tape
+  =/  said=(unit json)
+    ?.  ?=([%o *] conf)  ~
+    (~(get by p.conf) 'price')
+  ?.  ?=([~ %s *] said)  default-price-base
+  ?:(=('' p.u.said) default-price-base (trip p.u.said))
 ::
 ++  price-url
   |=  conf=json
   ^-  @t
-  (crip (weld (base conf %main) "/v1/prices"))
+  (crip (weld (price-base conf) "/v1/prices"))
 ::  +tx-url: where a signed transaction is POSTed
 ::
 ++  tx-url

@@ -139,6 +139,7 @@
     %+  send-json  eyre-id
     %-  pairs:enjs:format
     :~  ['providers' a+(provider-rows conf)]
+        ['price' (price-row conf)]
         ['waiting' a+open]
     ==
   ==
@@ -157,6 +158,21 @@
   %-  pairs:enjs:format
   :~  ['network' s+(scot %tas network)]
       ['url' s+(crip (base:esp conf network))]
+      ['configured' b+?=([~ %s ^] said)]
+  ==
+::  +price-row: who answers for the price, and whether that was decided
+::  by config.json or by the default. Its own row because it is its own
+::  provider: /v1/prices is not Esplora, and a self-hosted chain node
+::  will not serve it.
+::
+++  price-row
+  |=  conf=json
+  ^-  json
+  =/  said=(unit json)
+    ?.  ?=([%o *] conf)  ~
+    (~(get by p.conf) 'price')
+  %-  pairs:enjs:format
+  :~  ['url' s+(crip (price-base:esp conf))]
       ['configured' b+?=([~ %s ^] said)]
   ==
 ::  +read-open: every question under ask/ as the page shows it. A grub
