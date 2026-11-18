@@ -20,6 +20,16 @@
 /<  esp           /lib/wallet/esplora.hoon
 /<  taproot       /lib/taproot.hoon
 /<  sh            /lib/shell.hoon
+::  TODO(license): qrcode.min.js is vendored third-party code with its
+::  license banner stripped -- no copyright line, no @license. By its API
+::  (_htOption, makeCode, colorDark/colorLight, MODE_8BIT_BYTE) it is
+::  davidshimjs/qrcodejs, which is MIT, and MIT requires the notice to
+::  travel with the copy. We redistribute it: gw-suite is public. Confirm
+::  the upstream source and version, restore the /*! ... */ banner at the
+::  top of the file, and record library/version/url/license somewhere a
+::  reader will find. Same question applies to marked.min.js and
+::  html2canvas.min.js wherever they are vendored.
+::
 /&  qr-js         qrcode.min.js
 /&  man           /man/wallet/app/readme.md
 /<  tools         /lib/tools.hoon
@@ -63,8 +73,7 @@
             ==
             :-  'peek'
             :-  %a
-            :~  (line '@contacts' 'read the contacts it integrates with, resolved by alias (labels/overlays)')
-                ::  the exact tree it reads, with the TRAILING SLASH that
+            :~  ::  the exact tree it reads, with the TRAILING SLASH that
                 ::  makes it a tree: a bare '@esplora' grants the grub at
                 ::  that path, while '@esplora/' resolves to nothing at all
                 (line '@esplora/ask/' 'follow and read the answers to its own questions')
@@ -98,11 +107,6 @@
           ::  what is listed here, so it is listed, or here:sh reads "not
           ::  approved" after every reload and the UI answers 503 forever.
           [%stay %& [/ %'grant.json']]
-          =/  init-deps=json
-            %-  pairs:enjs:format
-            :~  contacts+s+'/apps/contacts.desk/desk/data/contacts.contacts'
-            ==
-          [%fall %& [/ %'deps.json'] [[/ %json] init-deps]]
           [%fall %& [/ %'labels.wallet_labels'] [[/wallet %labels] init-lbls]]
           [%fall %& [/ %'secrets.wallet_secrets'] [[/wallet %secrets] init-sec]]
           [%fall %& [/ %'drafts.wallet_drafts'] [[/wallet %drafts] *(map @t transaction:drft)]]
@@ -2561,73 +2565,6 @@
   %+  turn  ~(tap by seeds.sec)
   |=([xp=@t sd=seed] `wallet-data`[sd xp])
 ::
-::  +load-contacts: peek contacts overlay dir for send-to picker
-::
-++  load-deps
-  =/  m  (fiber:fiber:nexus ,json)
-  ^-  form:m
-  =/  rd=road:tarball  (nex-road [%& ~ %'deps.json'])
-  ;<  exists=?  bind:m  (peek-exists:io rd)
-  ?.  exists  (pure:m ~)
-  ;<  =view:nexus  bind:m  (peek:io rd ~)
-  ?.  ?=([%file *] view)  (pure:m ~)
-  (pure:m !<(json (need-vase:tarball sang.view)))
-::  +contacts-alias-path: the contacts path resolved BY ALIAS. The shell
-::  writes the concrete road for each alias we asked for (weir.json's
-::  '@contacts') into grant.json's `aliases` map on approval. Reading it
-::  here means we never hardcode where contacts lives — it follows renames
-::  (like git_desk -> desk) and reinstalls. ~ if not approved / not present.
-++  contacts-alias-path
-  =/  m  (fiber:fiber:nexus ,(unit @t))
-  ^-  form:m
-  =/  rd=road:tarball  (nex-road [%& ~ %'grant.json'])
-  ;<  exists=?  bind:m  (peek-exists:io rd)
-  ?.  exists  (pure:m ~)
-  ;<  =view:nexus  bind:m  (peek:io rd ~)
-  ?.  ?=([%file *] view)  (pure:m ~)
-  =/  jon=(unit json)  (mole |.(!<(json (need-vase:tarball sang.view))))
-  ?~  jon  (pure:m ~)
-  ?.  ?=([%o *] u.jon)  (pure:m ~)
-  =/  al=(unit json)  (~(get by p.u.jon) 'aliases')
-  ?~  al  (pure:m ~)
-  ?.  ?=([%o *] u.al)  (pure:m ~)
-  =/  cv=(unit json)  (~(get by p.u.al) 'contacts')
-  ?~  cv  (pure:m ~)
-  ?.  ?=([%s *] u.cv)  (pure:m ~)
-  ?:  =('' p.u.cv)  (pure:m ~)
-  (pure:m `p.u.cv)
-++  load-contacts
-  =/  m  (fiber:fiber:nexus ,(map @t (map @t json)))
-  ^-  form:m
-  ::  prefer the alias-resolved path; fall back to deps.json, then the
-  ::  conventional location — so we still "try" to reach contacts pre-approval.
-  ;<  aliased=(unit @t)  bind:m  contacts-alias-path
-  ;<  deps=json  bind:m  load-deps
-  =/  contacts-path=path
-    =/  pax=(unit @t)
-      ?^  aliased  aliased
-      ?.  ?=([%o *] deps)  ~
-      =/  val  (~(get by p.deps) 'contacts')
-      ?~(val ~ ?.(?=([%s *] u.val) ~ `p.u.val))
-    ?~  pax  /apps/'contacts.desk'/desk/data/'contacts.contacts'
-    (stab u.pax)
-  =/  overlay-road=road:tarball  [%& %| (weld contacts-path /overlay)]
-  ;<  =view:nexus  bind:m  (peek:io overlay-road ~)
-  ?.  ?=([%ball *] view)  (pure:m ~)
-  =/  =lump:tarball  (fall fil.ball.view *lump:tarball)
-  %-  pure:m
-  %-  ~(gas by *(map @t (map @t json)))
-  %+  murn  ~(tap by contents.lump)
-  |=  [name=@ta =sang:tarball gain=? bang=(unit tang)]
-  ?.  =(%jobj name.p.sang)  ~
-  ?:  (is-boom:tarball sang)  ~
-  =/  key=@t
-    =/  parts=(list tape)  (rash name (more dot (star ;~(less dot prn))))
-    ?~  parts  name
-    (crip i.parts)
-  =/  obj=(map @t json)  !<((map @t json) (need-vase:tarball sang))
-  ?~  obj  ~
-  `[key obj]
 ::  +load-scan-state: read scan status from registry + proc file
 ::
 ++  load-scan-state
