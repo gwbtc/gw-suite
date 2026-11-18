@@ -1,0 +1,56 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SPV</title>
+<link rel="icon" type="image/svg+xml" href="/grubbery/spv/icon.svg">
+<link rel="stylesheet" href="/grubbery/spv/style.css">
+</head>
+<body>
+<header>
+  <img id="brand-icon" src="/grubbery/spv/icon.svg" alt="">
+  <h1>SPV</h1>
+  <span class="sub">headers, checked not trusted</span>
+  <span id="status"></span>
+</header>
+<main>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>The chain this ship has checked</h2>
+      <span id="state-pill"></span>
+    </div>
+    <p class="explain">
+      Every header below was parsed here, hashed here, and tested against the
+      difficulty target it declares — then refused unless it linked to the one
+      beneath it. A provider cannot forge that without doing the work. Nothing
+      below the <strong>checkpoint</strong> is verified: that is the oldest
+      block this ship will vouch for, set in <code>config.json</code>.
+    </p>
+    <table>
+      <tbody>
+        <tr><td>Network</td><td class="num" id="net"></td></tr>
+        <tr><td>Checkpoint</td><td class="num" id="checkpoint"></td></tr>
+        <tr><td>Verified to</td><td class="num" id="height"></td></tr>
+        <tr><td>Chain tip</td><td class="num" id="tip"></td></tr>
+        <tr><td>Headers held</td><td class="num" id="headers"></td></tr>
+      </tbody>
+    </table>
+    <div class="bar"><i id="bar" style="width:0%"></i></div>
+    <p class="muted" id="behind" style="margin-top:8px"></p>
+  </section>
+
+  <section class="panel" id="why-panel" hidden>
+    <div class="panel-head"><h2>Stalled</h2></div>
+    <p class="explain">
+      The sync stopped rather than skipping a block. A gap in a chain is not a
+      chain, so it records what went wrong and waits.
+    </p>
+    <p id="why" class="muted"></p>
+  </section>
+
+</main>
+<script src="/grubbery/spv/app.js"></script>
+</body>
+</html>

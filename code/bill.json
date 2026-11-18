@@ -1,5 +1,6 @@
 {
   "wallet.wallet_app": "/wallet/app",
   "nostr": "/nostr/app",
-  "esplora": "/esplora/app"
+  "esplora": "/esplora/app",
+  "spv": "/spv/app"
 }
