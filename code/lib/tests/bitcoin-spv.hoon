@@ -165,6 +165,43 @@
 ::  answers from the provider that have to agree, or our byte order is
 ::  wrong. Mainnet block 925,298.
 ::
+::  +test-header-fields-are-numbers-not-byte-soup: the four numeric
+::  fields of a header, against what the chain actually says about
+::  mainnet block 925,298.
+::
+::  Cutting these out of an atom built from flipped bytes leaves each
+::  one byte-reversed. For timestamp and nonce that is a wrong display;
+::  for bits it is a broken security property, because +bits-to-target
+::  reads the exponent off the top byte and a reversed value yields a
+::  target bigger than any hash -- so every header "passes" proof of
+::  work, including one that should not. This test is here because that
+::  shipped, and nothing caught it: the hash tests all passed, since
+::  the hash is taken over raw bytes and never touches these fields.
+::
+++  test-header-fields-are-numbers-not-byte-soup
+  |.  %-  expect-eq:test
+  :_  !>  [771.751.936 1.764.178.397 0x1701.d936 2.185.801.247]
+  !>
+  =/  got
+    %-  parse-header-fields:spv
+    '0000002e2b8629b4f58d6ad5691254578385f47575247244e37700000000000000000000b9979eb01c6deb12b3ab12d35d287b5bd798f870746de910369ec597a5b87b93dd39276936d901171fae4882'
+  [version.got timestamp.got bits.got nonce.got]
+::  +test-pow-rejects-a-header-that-did-not-earn-it: the target has to
+::  bite. Keep a real header's difficulty and lie about its hash: a
+::  hash above the target is not proof of anything.
+::
+++  test-pow-rejects-a-header-that-did-not-earn-it
+  |.  %-  expect:test  !>
+  =/  real=block-header:spv
+    %+  parse-raw-to-header:spv
+      '0000002e2b8629b4f58d6ad5691254578385f47575247244e37700000000000000000000b9979eb01c6deb12b3ab12d35d287b5bd798f870746de910369ec597a5b87b93dd39276936d901171fae4882'
+    925.298
+  ::  the real hash clears its target, a hash of all f's does not
+  =/  good  (validate-header-with-hash:spv real `@ux`computed-hash.real)
+  =/  bad
+    %+  validate-header-with-hash:spv  real
+    0xffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff
+  &(pow-valid.good !pow-valid.bad)
 ++  test-rebuild-header-bytes
   |.  %-  expect-eq:test
   :_  !>  %-  from-cord:hxb:bcu:spv

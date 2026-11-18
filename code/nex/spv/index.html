@@ -50,6 +50,72 @@
     <p id="why" class="muted"></p>
   </section>
 
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Block headers</h2>
+      <span id="hdr-range" class="muted"></span>
+      <span class="grow"></span>
+      <div class="pager">
+        <button id="newer" title="toward the tip">&lsaquo; newer</button>
+        <button id="older" title="toward the checkpoint">older &rsaquo;</button>
+      </div>
+    </div>
+    <p class="explain">
+      Every row was parsed and hashed here, and <strong>pow</strong> is the
+      answer to the only question that matters about a header: does its hash
+      beat the difficulty target it declares? A header that failed would never
+      have been seated &mdash; the sync stops rather than skipping one.
+    </p>
+    <table id="headers">
+      <thead>
+        <tr><th>Height</th><th>Hash</th><th>Time</th><th>PoW</th></tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    <p id="hdr-none" class="muted" hidden>No headers yet.</p>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Settings</h2>
+      <span id="cfg-saved" class="muted"></span>
+    </div>
+    <p class="explain">
+      Both of these decide what the chain here <em>is</em>, so changing either
+      discards it and builds again: a different network is a different chain,
+      and a different lookback is a different claim about how far back this
+      ship will vouch. Roughly 144 blocks a day.
+    </p>
+    <div class="fields">
+      <label for="cfg-net">Network</label>
+      <select id="cfg-net">
+        <option value="main">main</option>
+        <option value="testnet3">testnet3</option>
+        <option value="testnet4">testnet4</option>
+        <option value="signet">signet</option>
+        <option value="regtest">regtest</option>
+      </select>
+      <label for="cfg-look">Lookback</label>
+      <input id="cfg-look" type="number" min="0" step="1">
+      <span class="muted" id="cfg-look-note"></span>
+    </div>
+    <div class="actions">
+      <button id="cfg-save" class="primary">Save and rebuild</button>
+      <button id="cfg-reset">Rebuild from scratch</button>
+    </div>
+  </section>
+
+  <section class="panel" id="detail-panel" hidden>
+    <div class="panel-head">
+      <h2>Block <span id="d-height"></span></h2>
+      <span class="grow"></span>
+      <button id="d-close" class="small">close</button>
+    </div>
+    <table>
+      <tbody id="detail"></tbody>
+    </table>
+  </section>
+
 </main>
 <script src="/grubbery/spv/app.js"></script>
 </body>

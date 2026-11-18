@@ -1,5 +1,6 @@
 ::  spv nexus: what this ship is willing to believe about the chain.
 ::
+::
 ::  @esplora fetches. This decides. The split matters: esplora is the
 ::  stranger we ask, and nothing it says is checked there -- here a
 ::  header is parsed, hashed, tested against the target in its own
@@ -268,6 +269,26 @@
   ?:  |(=('' id) ?=(~ req))
     ~&  >>>  "%spv: poke missing id or req"
     $
+  ::  reset: forget the chain and build it again. Not a convenience --
+  ::  when what counts as verified changes, every conclusion drawn under
+  ::  the old rule is void, and keeping it would be claiming work that
+  ::  was never done.
+  ?:  =('reset' (jstr (fall (junit jon 'req') [%o ~]) 'op'))
+    ::  './' -- our OWN directory. main.sig sits at the nexus root, so
+    ::  [%| 1 ...] from here points at the desk above us, not at us.
+    ;<  ~  bind:m
+      %+  put:io  (cord-to-road:tarball './chain.spv_chain')
+      [[/spv %chain] *(map network spv-chain)]
+    ;<  now=@da  bind:m  get-time:io
+    ;<  ~  bind:m
+      %+  put:io  (cord-to-road:tarball './status.json')
+      :-  [/ %json]
+      %-  pairs:enjs:format
+      :~  ['state' s+'reset']
+          ['why' s+'chain discarded, syncing again']
+          ['at' s+(scot %da now)]
+      ==
+    $
   =/  =road:tarball  (cord-to-road:tarball (crip "./ask/{(trip id)}.json"))
   =/  content=json
     (pairs:enjs:format ~[['status' s+'pending'] ['request' u.req]])
@@ -321,6 +342,34 @@
   ?.  good
     (answer req %.n 'the merkle branch does not fold to our header' `height)
   (answer req %.y 'in a block this ship verified' `height)
+::  +header-page: one page of the chain, newest first.
+::
+::  Sorted by height descending and sliced, which is enough for a few
+::  thousand headers and honest about being so: a chain that grows past
+::  that wants an index, not a bigger scan.
+::
+++  header-page
+  |=  [c=spv-chain page=@ud]
+  ^-  (list json)
+  =/  all=(list block-header)
+    %+  sort  (turn ~(tap by headers.c) |=([* h=block-header] h))
+    |=([a=block-header b=block-header] (gth height.a height.b))
+  =/  skip=@ud  (mul page 25)
+  %+  turn  (scag 25 (slag skip all))
+  |=  h=block-header
+  ^-  json
+  %-  pairs:enjs:format
+  :~  ['height' (numb:enjs:format height.h)]
+      ['hash' s+(to-cord:hxb:bcu:spv [32 `@ux`computed-hash.h])]
+      ['prev' s+(to-cord:hxb:bcu:spv [32 `@ux`prev-hash.h])]
+      ['merkle' s+(to-cord:hxb:bcu:spv [32 `@ux`merkle-root.h])]
+      ['timestamp' (numb:enjs:format timestamp.h)]
+      ['bits' (numb:enjs:format bits.h)]
+      ['nonce' (numb:enjs:format nonce.h)]
+      ['work' (numb:enjs:format cumulative-work.h)]
+      ::  the column the whole page exists for
+      ['pow' b+verified-pow.h]
+  ==
 ::  +header-at: our verified header at a height, if we hold one
 ::
 ++  header-at
@@ -550,6 +599,67 @@
   =/  [site=path args=quay:eyre]  (parse-url:http-utils url.request.req)
   =/  suffix=path  (slag (lent prefix) site)
   ?+    suffix  (serve-file eyre-id root ?~(suffix 'index.html' i.suffix))
+      ::  POST /api/config — change who we follow and how far back.
+      ::
+      ::  Both settings invalidate what is already here: a different
+      ::  network is a different chain, and a different lookback is a
+      ::  different claim about how far back we vouch. So saving
+      ::  discards the chain rather than leaving headers behind that
+      ::  were gathered under another rule.
+      [%api %config ~]
+    ?.  =('POST' method.request.req)
+      (reply:web:nw eyre-id 405 'POST only')
+    =/  body=(unit json)  (post-json:nw req)
+    ?~  body  (reply:web:nw eyre-id 400 'json body required')
+    ;<  cur=json  bind:m  (read-json [%& %& root %'config.json'])
+    =/  net=@t
+      =/  g=@t  (jstr (fall body [%o ~]) 'network')
+      ?:(=('' g) (jstr cur 'network') g)
+    =/  look=@ud
+      =/  g=(unit @ud)  (jnum (fall body [%o ~]) 'lookback')
+      ?^(g u.g (fall (jnum cur 'lookback') 1.008))
+    ;<  ~  bind:m
+      %+  put:io  [%& %& root %'config.json']
+      :-  [/ %json]
+      %-  pairs:enjs:format
+      :~  ['network' s+(scot %tas (net-of net))]
+          ['lookback' (numb:enjs:format look)]
+      ==
+    ;<  ~  bind:m
+      %+  put:io  [%& %& root %'chain.spv_chain']
+      [[/spv %chain] *(map network spv-chain)]
+    ;<  now=@da  bind:m  get-time:io
+    ;<  ~  bind:m
+      %+  put:io  [%& %& root %'status.json']
+      :-  [/ %json]
+      %-  pairs:enjs:format
+      :~  ['state' s+'reset']
+          ['why' s+'settings changed, chain discarded']
+          ['at' s+(scot %da now)]
+      ==
+    (send-json:web:nw eyre-id (pairs:enjs:format ~[['ok' b+%.y]]))
+  ::
+      ::  /api/headers?page= — the verified chain, newest first, 25 to
+      ::  a page. Every row is a header this ship hashed and tested; the
+      ::  pow column is the whole reason the list exists.
+      [%api %headers ~]
+    =/  page=@ud
+      =/  p  (get-key:kv:html-utils 'page' args)
+      ?~(p 0 (fall (rush u.p dem) 0))
+    ;<  conf=json  bind:m  (read-json [%& %& root %'config.json'])
+    =/  net=network  (net-of (jstr conf 'network'))
+    ;<  chains=(map network spv-chain)  bind:m
+      (read-chain [%& %& root %'chain.spv_chain'])
+    =/  c=spv-chain  (fall (~(get by chains) net) *spv-chain)
+    =/  rows=(list json)  (header-page c page)
+    %+  send-json:web:nw  eyre-id
+    %-  pairs:enjs:format
+    :~  ['page' (numb:enjs:format page)]
+        ['per' (numb:enjs:format 25)]
+        ['total' (numb:enjs:format ~(wyt by headers.c))]
+        ['headers' a+rows]
+    ==
+  ::
       [%api %status ~]
     ;<  conf=json  bind:m  (read-json [%& %& root %'config.json'])
     ;<  st=json  bind:m  (read-json [%& %& root %'status.json'])

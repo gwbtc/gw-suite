@@ -164,15 +164,25 @@
   =/  header=@ux  (parse-bitcoin-header raw-header)
   ::  Header atom has flipped byte order: byte 0 is at bit position 608-639 (76*8 to 79*8)
   ::  To extract wire format bytes [pos, pos+len), use: (cut 3 [(sub 80 (add pos len)) len])
-  =/  version=@ud      (cut 3 [(sub 80 4) 4] header)          ::  bytes 0-3   -> pos 76
+  =/  version-raw=@ux     (cut 3 [(sub 80 4) 4] header)      ::  bytes 0-3   -> pos 76
   =/  prev-hash-be=@ux    (cut 3 [(sub 80 36) 32] header)     ::  bytes 4-35  -> pos 44
   =/  merkle-root-be=@ux  (cut 3 [(sub 80 68) 32] header)     ::  bytes 36-67 -> pos 12
-  =/  timestamp=@ud    (cut 3 [(sub 80 72) 4] header)         ::  bytes 68-71 -> pos 8
-  =/  bits=@ux         (cut 3 [(sub 80 76) 4] header)         ::  bytes 72-75 -> pos 4
-  =/  nonce=@ud        (cut 3 [(sub 80 80) 4] header)         ::  bytes 76-79 -> pos 0
+  =/  timestamp-raw=@ux   (cut 3 [(sub 80 72) 4] header)      ::  bytes 68-71 -> pos 8
+  =/  bits-raw=@ux        (cut 3 [(sub 80 76) 4] header)      ::  bytes 72-75 -> pos 4
+  =/  nonce-raw=@ux       (cut 3 [(sub 80 80) 4] header)      ::  bytes 76-79 -> pos 0
   ::  Flip hash fields to little-endian format
   =/  prev-hash=@ux    dat:(flip:byt:bcu [32 prev-hash-be])
   =/  merkle-root=@ux  dat:(flip:byt:bcu [32 merkle-root-be])
+  ::  and flip the four NUMBERS too. Cutting them out of an atom built
+  ::  from flipped bytes leaves each one byte-reversed, which for bits
+  ::  is not a cosmetic bug: +bits-to-target reads the exponent off the
+  ::  top byte, so a reversed 0x17001473 becomes exponent 115 and a
+  ::  target around 2^900 -- larger than any hash, which makes the
+  ::  proof-of-work test pass for anything at all.
+  =/  version=@ud      dat:(flip:byt:bcu [4 version-raw])
+  =/  timestamp=@ud    dat:(flip:byt:bcu [4 timestamp-raw])
+  =/  bits=@ux         dat:(flip:byt:bcu [4 bits-raw])
+  =/  nonce=@ud        dat:(flip:byt:bcu [4 nonce-raw])
   [version prev-hash merkle-root timestamp bits nonce]
 ::  +parse-raw-to-header: Complete raw hex to block-header conversion
 ::
