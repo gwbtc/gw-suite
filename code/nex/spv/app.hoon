@@ -79,6 +79,11 @@
           [%fall %& [/ %'config.json'] [[/ %json] init-config]]
           [%fall %& [/ %'chain.spv_chain'] [[/spv %chain] *(map network spv-chain)]]
           [%fall %& [/ %'status.json'] [[/ %json] [%o ~]]]
+          ::  the same lifecycle-grub protocol @esplora answers on, so an
+          ::  asker uses one arm for both: keep ask/<id>.json, poke
+          ::  main.sig, read on news, drop.
+          [%over %& [/ %'main.sig'] [[/ %sig] ~]]
+          [%fall %| /ask empty-dir:loader]
           [%over %& [/ %'sync.sig'] [[/ %sig] ~]]
           [%over %& [/ %'web.sig'] [[/ %sig] ~]]
           [%fall %| /requests empty-dir:loader]
@@ -91,6 +96,12 @@
       =/  m  (fiber:fiber:nexus ,~)
       ^-  process:fiber:nexus
       ?+    rail  stay:m
+          [~ %'main.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%spv/main: failed")
+        main-loop
+          [[%ask ~] @]
+        ;<  ~  bind:m  (rise-wait:io prod "%spv/ask: failed")
+        (run-verify rail)
           [~ %'sync.sig']
         ;<  ~  bind:m  (rise-wait:io prod "%spv/sync: failed")
         (sync-loop rail)
@@ -120,7 +131,7 @@
   ^-  json
   %-  pairs:enjs:format
   :~  title+s+'SPV'
-      info+s+'headers, checked not trusted'
+      info+s+'headers, checked not trusted.'
       color+s+'#1d2b1f'
       href+s+'/grubbery/spv'
       kind+s+'utility'
@@ -234,6 +245,105 @@
   =/  final=block-header:spv
     checked(cumulative-work (calculate-cumulative-work:spv parent work))
   $(c c(headers (add-header-to-chain:spv final parent headers.c)), rows t.rows)
+::  +main-loop: open a question, the way @esplora does. The asker names
+::  the id so it can keep the road before there is anything there.
+::
+++  main-loop
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  |-
+  ;<  [=from:fiber:nexus =sage:tarball]  bind:m  take-poke-from:io
+  ?.  =([/ %json] p.sage)
+    ~&  >>>  [%spv-unrecognized-poke mark=p.sage from=from]
+    $
+  =/  jon=json  (fall (mole |.(!<(json q.sage))) *json)
+  =/  id=@t  (jstr jon 'id')
+  =/  req=(unit json)  (junit jon 'req')
+  ?:  |(=('' id) ?=(~ req))
+    ~&  >>>  "%spv: poke missing id or req"
+    $
+  =/  =road:tarball  (cord-to-road:tarball (crip "./ask/{(trip id)}.json"))
+  =/  content=json
+    (pairs:enjs:format ~[['status' s+'pending'] ['request' u.req]])
+  ;<  ~  bind:m  (make:io road |+[[[/ %json] content] ~])
+  ;<  ~  bind:m  (gain:io road %.y)
+  $
+::  +run-verify: is this transaction really in the chain?
+::
+::  Ask @esplora for the merkle branch, then check it against a header
+::  WE verified -- not against anything the provider says about the
+::  block. If the branch folds up to the merkle root of our own header
+::  at that height, the transaction is in a block that cost real work to
+::  make. If we do not hold a header at that height, we say so rather
+::  than guessing: outside the verified span is not the same as false.
+::
+++  run-verify
+  |=  =rail:tarball
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  own=json  bind:m  (get-state-as:io ,json)
+  ?.  =('pending' (jstr own 'status'))  stay:m
+  =/  req=json  (fall (junit own 'request') [%o ~])
+  =/  txid=@t  (jstr req 'txid')
+  ?:  =('' txid)  (answer req %.n 'no txid given' ~)
+  ;<  conf=json  bind:m  (read-json (nex-road:io rail [%& / %'config.json']))
+  =/  net=network  (net-of (jstr conf 'network'))
+  ;<  where=(unit path)  bind:m
+    (esplora-base (nex-road:io rail [%& / %'grant.json']))
+  ?~  where  (answer req %.n 'no road to the chain service' ~)
+  ;<  proof=json  bind:m  (ask-body u.where (merkle:question:esp net txid))
+  ?.  ?=([%o *] proof)  (answer req %.n 'the chain service has no proof for it' ~)
+  =/  height=@ud  (fall (jnum proof 'block_height') 0)
+  =/  pos=@ud  (fall (jnum proof 'pos') 0)
+  =/  branch=(list @t)
+    =/  br=(unit json)  (junit proof 'merkle')
+    ?.  ?=([~ %a *] br)  ~
+    (murn p.u.br |=(j=json ?:(?=([%s *] j) `p.j ~)))
+  ;<  chains=(map network spv-chain)  bind:m
+    (read-chain (nex-road:io rail [%& / %'chain.spv_chain']))
+  =/  c=spv-chain  (fall (~(get by chains) net) *spv-chain)
+  =/  mine=(unit block-header)  (header-at c height)
+  ?~  mine
+    %:  answer
+      req
+      %.n
+      (crip "block {(a-co:co height)} is outside the span this ship has verified")
+      `height
+    ==
+  =/  root=@t  (to-cord:hxb:bcu:spv [32 `@ux`merkle-root.u.mine])
+  =/  good=?  (verify-merkle-proof:spv txid branch pos root)
+  ?.  good
+    (answer req %.n 'the merkle branch does not fold to our header' `height)
+  (answer req %.y 'in a block this ship verified' `height)
+::  +header-at: our verified header at a height, if we hold one
+::
+++  header-at
+  |=  [c=spv-chain height=@ud]
+  ^-  (unit block-header)
+  =/  hs  ~(tap by headers.c)
+  |-  ^-  (unit block-header)
+  ?~  hs  ~
+  ?:  =(height height.q.i.hs)  `q.i.hs
+  $(hs t.hs)
+::  +answer: the verdict, written beside the question that asked for it
+::
+++  answer
+  |=  [req=json ok=? why=@t height=(unit @ud)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  now=@da  bind:m  get-time:io
+  =/  out=json
+    %-  pairs:enjs:format
+    :~  ['status' s+'done']
+        ['request' req]
+        ['ok' b+%.y]
+        ['verified' b+ok]
+        ['why' s+why]
+        ['height' ?~(height ~ (numb:enjs:format u.height))]
+        ['at' s+(scot %da now)]
+    ==
+  ;<  ~  bind:m  (replace:io out)
+  stay:m
 ::  +ascending-above: a block listing comes back newest first and
 ::  contiguous, so flipping it is the sort. Drops anything at or below
 ::  what we already hold, which is how a batch overlapping our tip is
@@ -389,7 +499,16 @@
     %regtest  %regtest
   ==
 ::
+::  jstr is nexus-web's, which answers a STRING or ''. A field that is
+::  an object or an array needs the unit, and reaching for jget there
+::  hands `fall` something that is not a unit at all.
+::
 ++  jstr  jget:nw
+++  junit
+  |=  [j=json k=@t]
+  ^-  (unit json)
+  ?.  ?=([%o *] j)  ~
+  (~(get by p.j) k)
 ++  jnum
   |=  [j=json k=@t]
   ^-  (unit @ud)
