@@ -110,6 +110,16 @@
   |=  [conf=json =network]
   ^-  @t
   (crip (weld (base conf network) "/blocks/tip/height"))
+::  +blocks-url: ten blocks from a height, full fields each. The way to
+::  follow a chain without asking twice per block: one request carries
+::  the ten hashes AND everything a header is made of, so a sync walks
+::  in tens instead of pairs. 51,000 blocks is 5,100 requests this way
+::  and 102,000 the other.
+::
+++  blocks-url
+  |=  [conf=json =network height=@t]
+  ^-  @t
+  (crip :(weld (base conf network) "/blocks/" (trip height)))
 ::
 ++  merkle-url
   |=  [conf=json =network txid=@t]
@@ -260,6 +270,7 @@
   ++  header     |=([=network hash=@t] (ask-body 'header' network ~[['hash' s+hash]]))
   ++  block-at   |=([=network h=@t] (ask-body 'block-at' network ~[['height' s+h]]))
   ++  tip        |=(=network (ask-body 'tip' network ~))
+  ++  blocks     |=([=network h=@t] (ask-body 'blocks' network ~[['height' s+h]]))
   ++  merkle     |=([=network txid=@t] (ask-body 'merkle' network ~[['txid' s+txid]]))
   --
 ::

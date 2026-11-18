@@ -294,6 +294,7 @@
       %header     ?:(=('' hash) ~ `(header-url:esp conf network hash))
       %block-at   ?:(=('' height) ~ `(height-url:esp conf network height))
       %tip        `(tip-url:esp conf network)
+      %blocks     ?:(=('' height) ~ `(blocks-url:esp conf network height))
       %merkle     ?:(=('' txid) ~ `(merkle-url:esp conf network txid))
     ==
   ?~  url  (answer req %.n 0 'bad ask' ~)

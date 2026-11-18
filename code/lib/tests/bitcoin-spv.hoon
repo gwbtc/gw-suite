@@ -159,6 +159,60 @@
 ::
 ::  TDD GOAL TESTS: All 100 cases should produce correct hashes after fix
 ::
+::  +test-rebuild-header-bytes: the fields an Esplora block listing
+::  gives us, serialized back into the 80 bytes, must equal the raw
+::  header that same Esplora serves for the block -- two independent
+::  answers from the provider that have to agree, or our byte order is
+::  wrong. Mainnet block 925,298.
+::
+++  test-rebuild-header-bytes
+  |.  %-  expect-eq:test
+  :_  !>  %-  from-cord:hxb:bcu:spv
+      '0000002e2b8629b4f58d6ad5691254578385f47575247244e37700000000000000000000b9979eb01c6deb12b3ab12d35d287b5bd798f870746de910369ec597a5b87b93dd39276936d901171fae4882'
+  !>  %-  from-cord:hxb:bcu:spv
+  %:  build-raw-header:spv
+    771.751.936
+    '0000000000000000000077e34472247575f4858357541269d56a8df5b429862b'
+    '937bb8a597c59e3610e96d7470f898d75b7b285dd312abb312eb6d1cb09e97b9'
+    1.764.178.397
+    385.997.110
+    2.185.801.247
+  ==
+::  +test-header-from-fields: and the rebuilt header hashes to the id
+::  the provider claimed for it. This is the check that makes reading a
+::  block listing as safe as reading raw bytes.
+::
+++  test-header-from-fields
+  |.  %-  expect:test  !>
+  =/  got=(unit block-header:spv)
+    %:  header-from-fields:spv
+      925.298
+      '00000000000000000000b3200eb792002f57bab93f219dbc8d139ab434801567'
+      771.751.936
+      '0000000000000000000077e34472247575f4858357541269d56a8df5b429862b'
+      '937bb8a597c59e3610e96d7470f898d75b7b285dd312abb312eb6d1cb09e97b9'
+      1.764.178.397
+      385.997.110
+      2.185.801.247
+    ==
+  ?=(^ got)
+::  +test-header-from-fields-rejects-a-lie: change one field and the
+::  hash no longer matches the id, so it is refused.
+::
+++  test-header-from-fields-rejects-a-lie
+  |.  %-  expect:test  !>
+  =/  got=(unit block-header:spv)
+    %:  header-from-fields:spv
+      925.298
+      '00000000000000000000b3200eb792002f57bab93f219dbc8d139ab434801567'
+      771.751.936
+      '0000000000000000000077e34472247575f4858357541269d56a8df5b429862b'
+      '937bb8a597c59e3610e96d7470f898d75b7b285dd312abb312eb6d1cb09e97b9'
+      1.764.178.397
+      385.997.110
+      2.185.801.248
+    ==
+  ?=(~ got)
 ++  test-all-initially-failed-now-pass
   ::  After fixing the bug, all 50 "failure" cases should now PASS
   ::  (produce correct hashes matching network)

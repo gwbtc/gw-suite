@@ -287,6 +287,65 @@
 ::
 ::  Get spv-chain for a network (with safe checkpoint defaults)
 ::
+::  +build-raw-header: the 80 bytes, rebuilt from the fields an Esplora
+::  block listing gives us.
+::
+::  Following a chain one block at a time costs two requests each -- the
+::  hash at a height, then that block's header. /blocks/:height hands
+::  back ten blocks with every field a header is made of, which is the
+::  difference between 5,000 requests and 100,000 on a catch-up.
+::
+::  The catch is that we are now trusting a provider's PARSED view
+::  rather than bytes we can hash. So we rebuild the bytes ourselves and
+::  check they hash to the id it claimed: if any of this serialization
+::  is wrong, or the provider's fields disagree with its own hash, it
+::  fails loudly here instead of quietly seating a bad header. Byte
+::  order is Bitcoin's usual mess -- little-endian numbers, and the two
+::  hashes stored reversed from how they are displayed.
+::
+++  build-raw-header
+  |=  $:  version=@ud
+          prev=@t
+          merkle=@t
+          stamp=@ud
+          bits=@ud
+          nonce=@ud
+      ==
+  ^-  @t
+  =/  le4
+    |=  n=@ud  ^-  hexb
+    (flip:byt:bcu [4 `@ux`n])
+  =/  rev32
+    |=  c=@t  ^-  hexb
+    (flip:byt:bcu (take:byt:bcu 32 (from-cord:hxb:bcu c)))
+  %-  to-cord:hxb:bcu
+  %-  cat:byt:bcu
+  :~  (le4 version)
+      (rev32 prev)
+      (rev32 merkle)
+      (le4 stamp)
+      (le4 bits)
+      (le4 nonce)
+  ==
+::  +header-from-fields: a listing entry as a verified header, or ~ when
+::  the bytes we rebuilt do not hash to the id the provider gave.
+::
+++  header-from-fields
+  |=  $:  height=@ud
+          id=@t
+          version=@ud
+          prev=@t
+          merkle=@t
+          stamp=@ud
+          bits=@ud
+          nonce=@ud
+      ==
+  ^-  (unit block-header)
+  =/  raw=@t  (build-raw-header version prev merkle stamp bits nonce)
+  =/  hed=block-header  (parse-raw-to-header raw height)
+  ?.  =(computed-hash.hed `@uvI`(rash id hex))  ~
+  `hed
+::
 ++  get-spv-chain
   |=  [net=network spv=(map network spv-chain)]
   ^-  spv-chain
