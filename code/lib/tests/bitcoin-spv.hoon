@@ -202,6 +202,133 @@
     %+  validate-header-with-hash:spv  real
     0xffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff.ffff
   &(pow-valid.good !pow-valid.bad)
+::  ---------------------------------------------------------------
+::  the difficulty target
+::
+::  +test-bits-to-target: the compact form unpacked, worked out a
+::  different way than the arm does it (mul/bex rather than lsh).
+::  Mainnet block 925,298 declares 0x1701d936: exponent 23, mantissa
+::  0x01d936, so the target is that mantissa shifted up 8*(23-3) bits.
+::
+++  test-bits-to-target
+  |.  %-  expect-eq:test
+  :_  !>((mul 0x1.d936 (bex 160)))
+  !>((bits-to-target:spv 0x1701.d936))
+::  +test-target-fits-in-256-bits: the invariant that would have caught
+::  the byte-order bug without anyone knowing to look for it. A hash is
+::  256 bits, so a target at or above 2^256 is one no hash can exceed
+::  and a proof-of-work test against it passes everything. Reversed,
+::  0x1701d936 becomes 0x36d90117 -- exponent 54 -- and lands there.
+::
+++  test-target-fits-in-256-bits
+  |.  %-  expect:test  !>
+  =/  real=@ux  (bits-to-target:spv 0x1701.d936)
+  =/  reversed=@ux  (bits-to-target:spv 0x36d9.0117)
+  &((lth real (bex 256)) !(lth reversed (bex 256)))
+::  +test-work-rises-as-target-falls: work is 2^256/(target+1), so a
+::  harder block is worth more. Stated as a comparison rather than a
+::  number, because the number is just the formula written twice.
+::
+++  test-work-rises-as-target-falls
+  |.  %-  expect:test  !>
+  =/  easy=@ud  (calculate-work:spv (bits-to-target:spv 0x1d00.ffff))
+  =/  hard=@ud  (calculate-work:spv (bits-to-target:spv 0x1701.d936))
+  (gth hard easy)
+::  +test-cumulative-work-adds: a chain's work is its parent's plus its
+::  own, and a block with no parent carries only its own.
+::
+++  test-cumulative-work-adds
+  |.  %-  expect:test  !>
+  =/  parent=block-header:spv
+    %+  parse-raw-to-header:spv
+      '0000002338a7b82f7952c32ac285b473ca02ec400faff1b68b82162e53000000000000007ea78d3e9a91364fb33bcc1e8aad2de68cd6a2f482e2855fe1381a2bc7db77d42009c767fcff031a60c19a66'
+    4.000.000
+  =/  seeded=block-header:spv  parent(cumulative-work 1.000)
+  ?&  =(1.500 (calculate-cumulative-work:spv `seeded 500))
+      =(500 (calculate-cumulative-work:spv ~ 500))
+  ==
+::  ---------------------------------------------------------------
+::  merkle proofs have to REFUSE things
+::
+::  +test-merkle-rejects-wrong-root: the branch from block 4,000,000,
+::  folded against a root that is not its block's.
+::
+++  test-merkle-rejects-wrong-root
+  |.  %-  expect:test  !>
+  =/  got=?
+    %:  verify-merkle-proof:spv
+      'd8a8e1b3d8ba39e7ec6d2d1b7b4ad0bcdcb1b0b4d1c1b3a9e8d7c6b5a4938271'
+      ~['0000000000000000000000000000000000000000000000000000000000000001']
+      0
+      'ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff'
+    ==
+  !got
+::  +test-merkle-single-transaction-block: a block whose only
+::  transaction is the coinbase has an empty branch, and its txid IS
+::  the merkle root. The empty-siblings path, which nothing else here
+::  exercises.
+::
+++  test-merkle-single-transaction-block
+  |.  %-  expect:test  !>
+  =/  only=@t  '4a5e1e4baab89f3a32518a88c31bc87f618f76673e2cc77ab2127b7afdeda33b'
+  ?&  (verify-merkle-proof:spv only ~ 0 only)
+      !(verify-merkle-proof:spv only ~ 0 'deadbeef00000000000000000000000000000000000000000000000000000000')
+  ==
+::  ---------------------------------------------------------------
+::  chain connection
+::
+::  +test-chain-connection-finds-the-parent: block 4,000,001 offered to
+::  a chain holding 4,000,000 links to it, and the parent comes back.
+::
+++  test-chain-connection-finds-the-parent
+  |.  %-  expect:test  !>
+  =/  a=block-header:spv
+    %+  parse-raw-to-header:spv
+      '0000002338a7b82f7952c32ac285b473ca02ec400faff1b68b82162e53000000000000007ea78d3e9a91364fb33bcc1e8aad2de68cd6a2f482e2855fe1381a2bc7db77d42009c767fcff031a60c19a66'
+    4.000.000
+  =/  b=block-header:spv
+    %+  parse-raw-to-header:spv
+      '00000024aead64270b364766c2de42a29d87f344f929c0ec7ca4a647390300000000000025d198cfff2be0369dfbfed96b2060ae923edf4267365891d53d2e85a0668b532009c767fcff031a1338acfd'
+    4.000.001
+  =/  held=(map @uvI block-header:spv)  (malt ~[[computed-hash.a a]])
+  =/  got  (validate-chain-connection:spv b held `@uvI`0x0)
+  ?&  valid.got
+      ?=(^ parent.got)
+      =(computed-hash.a computed-hash.u.parent.got)
+  ==
+::  +test-chain-connection-refuses-an-orphan: a header whose parent is
+::  neither held nor the checkpoint has nothing to attach to.
+::
+++  test-chain-connection-refuses-an-orphan
+  |.  %-  expect:test  !>
+  =/  a=block-header:spv
+    %+  parse-raw-to-header:spv
+      '0000002338a7b82f7952c32ac285b473ca02ec400faff1b68b82162e53000000000000007ea78d3e9a91364fb33bcc1e8aad2de68cd6a2f482e2855fe1381a2bc7db77d42009c767fcff031a60c19a66'
+    4.000.000
+  =/  far=block-header:spv
+    %+  parse-raw-to-header:spv
+      '00e0fb32e7e1e4f8ea33547359d34bdbebc22deb1c371c5e21dd43963a2a0400000000004d50d33a7201acbbfc243f08d306ab1afa7e46b27c4632de12b087f5af39ac59cbbe52682478071bbd276989'
+    4.520.001
+  =/  held=(map @uvI block-header:spv)  (malt ~[[computed-hash.a a]])
+  =/  got  (validate-chain-connection:spv far held `@uvI`0x0)
+  !valid.got
+::  +test-first-block-must-meet-the-checkpoint: an EMPTY chain is not a
+::  licence to accept anything.
+::
+::  The checkpoint is this ship's one unverified assumption, and the
+::  block that follows it is the only thing tying everything above to
+::  it. If any header can be the first, a provider picks where our
+::  chain starts and the checkpoint decides nothing.
+::
+++  test-first-block-must-meet-the-checkpoint
+  |.  %-  expect:test  !>
+  =/  stranger=block-header:spv
+    %+  parse-raw-to-header:spv
+      '00e0fb32e7e1e4f8ea33547359d34bdbebc22deb1c371c5e21dd43963a2a0400000000004d50d33a7201acbbfc243f08d306ab1afa7e46b27c4632de12b087f5af39ac59cbbe52682478071bbd276989'
+    4.520.001
+  ::  empty chain, and a checkpoint this header does not follow
+  =/  got  (validate-chain-connection:spv stranger ~ `@uvI`0xdead.beef)
+  !valid.got
 ++  test-rebuild-header-bytes
   |.  %-  expect-eq:test
   :_  !>  %-  from-cord:hxb:bcu:spv

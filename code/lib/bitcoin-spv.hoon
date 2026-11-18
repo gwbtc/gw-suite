@@ -225,17 +225,22 @@
           checkpoint-hash=@uvI
       ==
   ^-  [valid=? parent=(unit block-header)]
-  ::  Allow if this is first block
-  ?:  =(0 (lent ~(tap by headers)))
-    [%.y ~]
-  ::  Allow if connects to checkpoint
+  ::  the block that follows the checkpoint is what ties everything
+  ::  above it to this ship's one unverified assumption
   ?:  =(prev-hash.header checkpoint-hash)
     [%.y ~]
-  ::  Check if parent exists in chain
+  ::  otherwise it must attach to a header we already hold
   =/  parent=(unit block-header)  (~(get by headers) prev-hash.header)
-  ?~  parent
-    [%.n ~]
-  [%.y parent]
+  ?^  parent  [%.y parent]
+  ::  an empty chain is only a licence to accept anything when there is
+  ::  no checkpoint to meet -- signet and regtest are followed from
+  ::  genesis, so the first block has nothing above it to check against.
+  ::  With a checkpoint set, letting any header be the first would hand
+  ::  the provider the choice of where our chain begins, and the
+  ::  checkpoint would decide nothing.
+  ?:  &(=(0 checkpoint-hash) =(0 ~(wyt by headers)))
+    [%.y ~]
+  [%.n ~]
 ::
 ++  add-header-to-chain
   |=  $:  header=block-header
