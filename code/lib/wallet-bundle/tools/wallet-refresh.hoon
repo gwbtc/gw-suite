@@ -2,7 +2,7 @@
 /<  wt     /lib/wallet-types.hoon
 /<  aio    /lib/wallet/accountio.hoon
 /<  b329   /lib/bip329.hoon
-::  wallet-refresh: refresh address data from mempool.space
+::  wallet-refresh: refresh address data, asked of the esplora nexus
 ::
 =,  wt
 ^-  tool:tools
@@ -11,7 +11,7 @@
 ++  description
   ^~  %-  crip
   ;:  weld
-    "Refresh a single address from mempool.space. "
+    "Refresh a single address, asked of the esplora nexus. "
     "Subscribes to the refresh process and waits for completion. "
     "Pass account key, chain (recv/chng), and address index."
   ==

@@ -11,6 +11,7 @@
 /<  drft  /lib/tx/draft.hoon
 /<  fees  /lib/tx/fees.hoon
 /<  b329  /lib/bip329.hoon
+/<  esp   /lib/wallet/esplora.hoon
 =,  wt
 |%
 ::  +num: render @ud as plain decimal cord (no dots)
@@ -499,183 +500,39 @@
   ?:  |(?=(~ idx) ?=(~ gap))  ['' 0 0]
   [p.u.phase u.idx u.gap]
 ::
-+$  scan-event
-  $%  [%http =client-response:iris]
-      [%pause ~]
-      [%resume ~]
-  ==
 ::
-++  take-scan-event
-  =/  m  (fiber:fiber:nexus ,scan-event)
-  ^-  form:m
-  |=  input:fiber:nexus
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %veto *]
-    [%fail (veto-error:io dart.u.in)]
-      [~ %poke * *]
-    ?:  =([/ %http-response] p.sage.u.in)
-      =/  resp=client-response:iris  !<(client-response:iris q.sage.u.in)
-      ?:  ?=(%cancel -.resp)
-        [%fail leaf+"http-request-cancelled" ~]
-      [%done %http resp]
-    =/  res=(unit json)  (mole |.(!<(json q.sage.u.in)))
-    ?~  res  [%skip ~]
-    ?.  ?=([%o *] u.res)  [%skip ~]
-    =/  act=(unit json)  (~(get by p.u.res) 'action')
-    ?:  =(`s+'pause' act)   [%done %pause ~]
-    ?:  =(`s+'resume' act)  [%done %resume ~]
-    [%skip ~]
-  ==
-::
-++  take-pause-event
-  =/  m  (fiber:fiber:nexus ,?)
-  ^-  form:m
-  |=  input:fiber:nexus
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %veto *]
-    [%fail (veto-error:io dart.u.in)]
-      [~ %poke * *]
-    =/  res=(unit json)  (mole |.(!<(json q.sage.u.in)))
-    ?~  res  [%skip ~]
-    ?.  ?=([%o *] u.res)  [%skip ~]
-    =/  act=(unit json)  (~(get by p.u.res) 'action')
-    ?:  =(`s+'resume' act)  [%done %.y]
-    [%skip ~]
-  ==
-::
-++  pause-loop
-  |=  progress=json
-  =/  m  (fiber:fiber:nexus ,~)
-  ^-  form:m
-  =/  marker-json=json
-    ?:  ?=([%o *] progress)
-      [%o (~(put by p.progress) 'paused' b+%.y)]
-    (pairs:enjs:format ~[['paused' b+%.y]])
-  ;<  ~  bind:m  (replace:io marker-json)
-  |-
-  ;<  resumed=?  bind:m  take-pause-event
-  ?.  resumed  $
-  ::  remove paused flag on resume
-  ;<  ~  bind:m  (replace:io (~(del jo:json-utils marker-json) /paused))
-  (pure:m ~)
-::
-++  mempool-base-url
-  |=  =network
-  ^-  tape
-  ?-  network
-    %main      "https://mempool.space/api/address/"
-    %testnet3  "https://mempool.space/testnet/api/address/"
-    %testnet4  "https://mempool.space/testnet4/api/address/"
-    %signet    "https://mempool.space/signet/api/address/"
-    %regtest   "http://localhost:3000/address/"
-  ==
-::  +scan-fetch: like fetch-address-info but pausable during HTTP wait
-::
-++  scan-fetch
-  |=  [progress=json address=@t =network]
-  =/  m  (fiber:fiber:nexus ,(unit address-info))
-  ^-  form:m
-  =/  url=@t
-    (crip (weld (mempool-base-url network) (trip address)))
-  =/  =request:http
-    [%'GET' url ~[['Accept' 'application/json']] ~]
-  ;<  ~  bind:m  (send-request:io request)
-  |-
-  ;<  evt=scan-event  bind:m  take-scan-event
-  ?-    -.evt
-      %pause   ;<  ~  bind:m  (pause-loop progress)  $
-      %resume  $
-      %http    (parse-address-response client-response.evt)
-  ==
-::  +parse-address-response: extract address-info from HTTP response
-::
-++  parse-address-response
-  |=  =client-response:iris
-  =/  m  (fiber:fiber:nexus ,(unit address-info))
-  ^-  form:m
-  ?.  ?=(%finished -.client-response)
-    (pure:m ~)
-  ?~  full-file.client-response
-    (pure:m ~)
-  =/  body=@t  q.data.u.full-file.client-response
-  =/  parsed=(each json tang)  (mule |.((need (de:json:html body))))
-  ?:  ?=(%| -.parsed)  (pure:m ~)
-  =/  data=json  p.parsed
-  =/  tx-count=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'tx_count'))))
-  =/  funded=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'funded_txo_sum'))))
-  =/  spent=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'spent_txo_sum'))))
-  =/  mem-tc=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'mempool_stats'/'tx_count'))))
-  =/  mem-funded=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'mempool_stats'/'funded_txo_sum'))))
-  =/  mem-spent=(unit @ud)
-    (mole |.((ni:dejs:format (~(got jo:json-utils data) /'mempool_stats'/'spent_txo_sum'))))
-  ?~  tx-count  (pure:m ~)
-  ?~  funded    (pure:m ~)
-  ?~  spent     (pure:m ~)
-  ;<  now=@da  bind:m  get-time:io
-  %:  pure:m  :-  ~
-  :*  u.tx-count  u.funded  u.spent
-      (fall mem-tc 0)  (fall mem-funded 0)  (fall mem-spent 0)
-      `now
-  ==  ==
 ::  +fetch-address-data: full address fetch — info, UTXOs, txs
 ::  returns fetched data for the caller to label and save
 ::
 ++  fetch-address-data
-  |=  [addr=@t =network]
+  |=  [addr=@t =network base=path]
   =/  m  (fiber:fiber:nexus ,[(unit address-info) (list utxo) (list transaction)])
   ^-  form:m
-  =/  base-url=tape  (mempool-base-url network)
-  ::  fetch address info
-  =/  info-url=@t  (crip (weld base-url (trip addr)))
-  ;<  ~  bind:m  (send-request:io [%'GET' info-url ~[['Accept' 'application/json']] ~])
-  ;<  info-resp=client-response:iris  bind:m  take-http
+  ;<  info=json  bind:m  (ask-body base (address:question:esp network addr))
   ;<  now=@da  bind:m  get-time:io
-  =/  new-info=(unit address-info)  (parse-info-response info-resp now)
-  ::  fetch UTXOs
-  =/  utxo-url=@t  (crip :(weld base-url (trip addr) "/utxo"))
-  ;<  ~  bind:m  (send-request:io [%'GET' utxo-url ~[['Accept' 'application/json']] ~])
-  ;<  utxo-resp=client-response:iris  bind:m  take-http
-  =/  utxos=(list utxo)  (parse-utxo-response utxo-resp)
-  ::  fetch transactions
-  =/  txs-url=@t  (crip :(weld base-url (trip addr) "/txs"))
-  ;<  ~  bind:m  (send-request:io [%'GET' txs-url ~[['Accept' 'application/json']] ~])
-  ;<  txs-resp=client-response:iris  bind:m  take-http
-  =/  txs=(list transaction)  (parse-txs-response txs-resp)
+  =/  new-info=(unit address-info)  (parse-info-response info now)
+  ;<  utxo-j=json  bind:m  (ask-body base (utxo:question:esp network addr))
+  =/  utxos=(list utxo)  (parse-utxo-response utxo-j)
+  ;<  txs-j=json  bind:m  (ask-body base (txs:question:esp network addr))
+  =/  txs=(list transaction)  (parse-txs-response txs-j)
   (pure:m [new-info utxos txs])
-::  +take-http: simple HTTP response handler
+::  +ask-body: the body of an @esplora answer, or ~ for anything that
+::  was not a plain yes. Every parser below reads "nothing" out of ~
+::  already, which is what a failed fetch used to look like here.
 ::
-++  take-http
-  =/  m  (fiber:fiber:nexus ,client-response:iris)
+++  ask-body
+  |=  [base=path q=json]
+  =/  m  (fiber:fiber:nexus ,json)
   ^-  form:m
-  |=  input:fiber:nexus
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %poke * *]
-    ?.  =([/ %http-response] p.sage.u.in)  [%skip ~]
-    =/  resp=client-response:iris  !<(client-response:iris q.sage.u.in)
-    [%done resp]
-  ==
+  ;<  ans=(each (map @t json) @tas)  bind:m  (ask:esp base q)
+  ?:  ?=(%| -.ans)  (pure:m ~)
+  ?.  =(`[%b %.y] (~(get by p.ans) 'ok'))  (pure:m ~)
+  (pure:m (fall (~(get by p.ans) 'body') ~))
 ::  +parse-info-response: extract address-info from HTTP response
 ::
 ++  parse-info-response
-  |=  [=client-response:iris now=@da]
+  |=  [data=json now=@da]
   ^-  (unit address-info)
-  ?.  ?=(%finished -.client-response)  ~
-  ?~  full-file.client-response  ~
-  =/  body=@t  q.data.u.full-file.client-response
-  =/  parsed=(each json tang)  (mule |.((need (de:json:html body))))
-  ?:  ?=(%| -.parsed)  ~
-  =/  data=json  p.parsed
   =/  tc=(unit @ud)  (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'tx_count'))))
   =/  funded=(unit @ud)  (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'funded_txo_sum'))))
   =/  spent=(unit @ud)  (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'spent_txo_sum'))))
@@ -687,15 +544,10 @@
 ::  +parse-utxo-response: extract UTXOs from HTTP response
 ::
 ++  parse-utxo-response
-  |=  =client-response:iris
+  |=  data=json
   ^-  (list utxo)
-  ?.  ?=(%finished -.client-response)  ~
-  ?~  full-file.client-response  ~
-  =/  body=@t  q.data.u.full-file.client-response
-  =/  parsed=(each json tang)  (mule |.((need (de:json:html body))))
-  ?:  ?=(%| -.parsed)  ~
-  ?.  ?=(%a -.p.parsed)  ~
-  %+  murn  p.p.parsed
+  ?.  ?=(%a -.data)  ~
+  %+  murn  p.data
   |=  j=json
   ^-  (unit utxo)
   =/  txid=(unit @t)
@@ -730,15 +582,10 @@
 ::  +parse-txs-response: extract transactions from HTTP response
 ::
 ++  parse-txs-response
-  |=  =client-response:iris
+  |=  data=json
   ^-  (list transaction)
-  ?.  ?=(%finished -.client-response)  ~
-  ?~  full-file.client-response  ~
-  =/  body=@t  q.data.u.full-file.client-response
-  =/  parsed=(each json tang)  (mule |.((need (de:json:html body))))
-  ?:  ?=(%| -.parsed)  ~
-  ?.  ?=(%a -.p.parsed)  ~
-  %+  murn  p.p.parsed
+  ?.  ?=(%a -.data)  ~
+  %+  murn  p.data
   |=  tj=json
   ^-  (unit transaction)
   =/  txid=(unit @t)
@@ -804,6 +651,7 @@
           start-idx=@ud
           start-gap=@ud
           main-road=road:tarball
+          base=path
       ==
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
@@ -859,7 +707,7 @@
   ;<  ~  bind:m  (sleep:io `@dr`(div ~s1 1.000))
   ::  full refresh: fetch info + UTXOs + txs
   ;<  [new-info=(unit address-info) utxos=(list utxo) txs=(list transaction)]  bind:m
-    (fetch-address-data u.addr network)
+    (fetch-address-data u.addr network base)
   ::  check gap
   ?~  new-info
     ~&  [%scan-chain %no-info u.addr]

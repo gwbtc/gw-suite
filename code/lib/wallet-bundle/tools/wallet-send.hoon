@@ -12,7 +12,7 @@
   ^~  %-  crip
   ;:  weld
     "Send bitcoin from a wallet account. "
-    "Builds a transaction, signs it, and broadcasts via mempool.space. "
+    "Builds a transaction, signs it, and broadcasts through the esplora nexus. "
     "Amount is in satoshis. Fee rate is in sat/vB (default 2). "
     "Pass the account key from wallet_status."
   ==

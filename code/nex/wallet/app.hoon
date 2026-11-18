@@ -17,8 +17,10 @@
 /<  det-ui        /lib/wallet/detail-ui.hoon
 /<  drft          /lib/tx/draft.hoon
 /<  b329          /lib/bip329.hoon
+/<  esp           /lib/wallet/esplora.hoon
 /<  taproot       /lib/taproot.hoon
 /<  sh            /lib/shell.hoon
+/&  qr-js         qrcode.min.js
 /&  man           /man/wallet/app/readme.md
 /<  tools         /lib/tools.hoon
 /&  bundle        /lib/wallet-bundle/
@@ -56,26 +58,34 @@
             :-  %a
             :~  (line '/sys/bowl.sig' 'entropy for key generation and the current time/ship')
                 (line '/sys/eyre/' 'bind /groundwire/wallet and serve the wallet UI')
-                (line '/sys/iris/' 'read balances, utxos and transactions from mempool.space, and broadcast there')
                 (line '/sys/behn/' 'pace scans and refreshes, and keep the live pages open')
+                (line '@esplora/main.sig' 'open a question with the chain service')
             ==
             :-  'peek'
             :-  %a
             :~  (line '@contacts' 'read the contacts it integrates with, resolved by alias (labels/overlays)')
+                ::  the exact tree it reads, with the TRAILING SLASH that
+                ::  makes it a tree: a bare '@esplora' grants the grub at
+                ::  that path, while '@esplora/' resolves to nothing at all
+                (line '@esplora/ask/' 'follow and read the answers to its own questions')
                 (line '/sys/link/' 'find itself by name, @wallet, from its procs and its tools')
+            ==
+            :-  'make'
+            :-  %a
+            :~  (line '@esplora/ask/' 'clear its own questions once it has read the answers')
             ==
         ==
       ::  tools added at runtime survive a reload: only /code/lib/tools of
       ::  the old tree is kept, so a lib the bundle no longer ships does not
       ::  live on in the tools nexus for ever
       =/  existing-tools=bole:tarball
-        =/  sub=(unit ball:tarball)  (~(dap ba:tarball ball) /'tools.tools'/code/lib/tools)
+        =/  sub=(unit ball:tarball)  (~(dap ba:tarball ball) /tools/code/lib/tools)
         ?~  sub  *bole:tarball
         =/  tools-bole=bole:tarball  (ball-to-bole:tarball u.sub)
         [`[`[/ %tools] ~ %.n ~] (malt ~[[%code `bole:tarball`[~ (malt ~[[%lib `bole:tarball`[~ (malt ~[[%tools tools-bole]])]]])]]])]
       %+  spin:loader  ball
       :~  (manifest:loader 0)
-          [%over %| /'tools.tools' (merge-boles:tools existing-tools (seed-tools:tools bundle))]
+          [%over %| /tools (merge-boles:tools existing-tools (seed-tools:tools bundle))]
           [%over %& [/ %'icon.svg'] [[/ %mime] icon]]
           [%over %& [/ %'link.json'] [[/ %json] (pairs:enjs:format ~[['name' s+'wallet'] ['description' s+'Bitcoin SPV wallet']])]]
           [%over %& [/ %'weir.json'] [[/ %json] weir-json]]
@@ -99,6 +109,14 @@
           [%fall %& [/ %'ptsts.wallet_ptsts'] [[/wallet %ptsts] *(map @t ptst:taproot)]]
           [%fall %& [/ %'registry.wallet_registry'] [[/wallet %registry] *proc-registry]]
           [%fall %| /proc empty-dir:loader]
+          ::  price.json: the last BTC/USD this ship fetched, and when
+          [%fall %& [/ %'price.json'] [[/ %json] [%o ~]]]
+          ::  price.sig: the fiber that keeps price.json current
+          ::  %over, like main.sig: a grub that is only a fiber should be
+          ::  recreated by every load, so a code change actually respins
+          ::  it. %fall seeds once at install and never again — the loop
+          ::  then runs the version it was born with for ever.
+          [%over %& [/ %'price.sig'] [[/ %sig] ~]]
           [%fall %& [/ %'offer-log.json'] [[/ %json] [%a ~]]]            ::  addresses offered to us by other ships
           ::  wallet's own tools nexus instance — runs wallet_* tools
           ::  under wallet's weir (keys never leave). mcp delegates here.
@@ -506,6 +524,47 @@
             $
           ==
         ==
+          ::  price.sig: keep what a bitcoin is worth roughly current.
+          ::  Asked of the same provider the wallet reads the chain from,
+          ::  so the wallet speaks to exactly one stranger. Every five
+          ::  minutes, forever; a failed fetch leaves the last good price
+          ::  standing and tries again at the next tick.
+          ::
+          [~ %'price.sig']
+        ;<  ~  bind:m  (rise-wait:io prod "%wallet price: failed")
+        |-
+        ::  the wallet no longer fetches: it asks @esplora, which is the
+        ::  only thing here that talks to the internet
+        ;<  where=(unit path)  bind:m
+          (alias:esp (nex-road [%& ~ %'grant.json']) 'esplora')
+        ::  a price, or whatever stood in the way of one. A step that
+        ::  failed names itself; a nexus that was reached and said no
+        ::  hands over what it said, which is the diagnosis already.
+        ;<  got=(each @ud json)  bind:m
+          =/  n  (fiber:fiber:nexus ,(each @ud json))
+          ?~  where  (pure:n |+s+'no-alias')
+          ;<  ans=(each (map @t json) @tas)  bind:n
+            (ask:esp u.where (price:question:esp ~))
+          ?:  ?=(%| -.ans)  (pure:n |+s+p.ans)
+          ?.  =(`[%b %.y] (~(get by p.ans) 'ok'))  (pure:n |+[%o p.ans])
+          =/  body=(unit json)  (~(get by p.ans) 'body')
+          ?~  body  (pure:n |+s+'no-body')
+          =/  usd=(unit @ud)
+            (mole |.((ni:dejs:format (~(got jo:json-utils u.body) /'USD'))))
+          (pure:n ?~(usd |+(pairs:enjs:format ~[['no-usd' u.body]]) &+u.usd))
+        ;<  now=@da  bind:m  get-time:io
+        ;<  ~  bind:m
+          %+  put:io  (nex-road [%& ~ %'price.json'])
+          :-  [/ %json]
+          ?:  ?=(%& -.got)
+            (pairs:enjs:format ~[['usd' (numb:enjs:format p.got)] ['at' s+(scot %da now)]])
+          ::  why there is no price, written where it can be read
+          %-  pairs:enjs:format
+          :~  ['at' s+(scot %da now)]
+              ['why' p.got]
+          ==
+        ;<  ~  bind:m  (sleep:io ~m5)
+        $
           ::  /ui/http.sig: bind /groundwire/wallet/ and dispatch requests
           ::
           [[%ui ~] %'http.sig']
@@ -545,6 +604,34 @@
           ;<  lbls=labels:b329  bind:m  load-labels:h
           =/  wals=(list wallet-data)  (secrets-to-wallets:h sec)
           ;<  ~  bind:m  (send-html:h eyre-id (wallet-page:h nexus-root wals lbls sec))
+          (pure:m ~)
+        ::  route: /price → what this ship last learned a bitcoin is
+        ::  worth. It only READS: a page load must never wait on someone
+        ::  else's server, so the fetching is a loop of its own
+        ::  (price.sig) and this serves whatever it last wrote.
+        ?:  ?=([%price ~] suffix)
+          ::  addressed through here:sh, the address the shell granted us,
+          ::  NOT a relative road: a request fiber is sandboxed, and from
+          ::  inside the sandbox a walk finds nothing (same reason the
+          ::  handler above takes nexus-root rather than walking).
+          =/  rd=road:tarball
+            [%& %& (stab (crip nexus-root)) %'price.json']
+          ;<  =view:nexus  bind:m  (peek:io rd ~)
+          =/  cached=json
+            ?.  ?=([%file *] view)  [%o ~]
+            =/  res=(each json tang)  (mule |.(!<(json (need-vase:tarball sang.view))))
+            ?.(?=(%& -.res) [%o ~] p.res)
+          ;<  ~  bind:m
+            %+  send-simple:http-res:io  eyre-id
+            :-  [200 ~[['content-type' 'application/json']]]
+            `(as-octs:mimes:html (en:json:html cached))
+          (pure:m ~)
+        ::  route: /qrcode.min.js → the vendored qr library. Served from
+        ::  the desk so the signing page loads no third-party script.
+        ?:  ?=([%'qrcode.min.js' ~] suffix)
+          ;<  ~  bind:m
+            %+  send-simple:http-res:io  eyre-id
+            [[200 ~[['content-type' 'text/javascript']]] `q.qr-js]
           (pure:m ~)
         ::  route: /simple → simple wallet page
         ?:  ?=([%simple ~] suffix)
@@ -1165,6 +1252,25 @@
   |=  =lane:tarball
   ^-  road:tarball
   (nex-road:io rail lane)
+::  +esplora-base: where @esplora lives, from this app's own grant
+::  aliases. The wallet reaches the chain through exactly one road and
+::  this is it; ~ means the shell has not granted it, and every caller
+::  then behaves the way a failed fetch used to.
+::
+++  esplora-base
+  =/  m  (fiber:fiber:nexus ,(unit path))
+  ^-  form:m
+  (alias:esp (nex-road [%& ~ %'grant.json']) 'esplora')
+::  +ask-body: the body of an @esplora answer, or ~ for anything else
+::
+++  ask-body
+  |=  [base=path q=json]
+  =/  m  (fiber:fiber:nexus ,json)
+  ^-  form:m
+  ;<  ans=(each (map @t json) @tas)  bind:m  (ask:esp base q)
+  ?:  ?=(%| -.ans)  (pure:m ~)
+  ?.  =(`[%b %.y] (~(get by p.ans) 'ok'))  (pure:m ~)
+  (pure:m (fall (~(get by p.ans) 'body') ~))
 ::  +get-or-gen-uuid: read optional uuid from json, generate if absent
 ::
 ++  get-or-gen-uuid
@@ -1243,6 +1349,8 @@
   =/  network=network:wt  (get-acct-network:aio lbls acct-ref)
   =/  progress=scan-progress:aio  (parse-scan-progress:aio prev)
   =/  main-road=road:tarball  (nex-road [%& ~ %'main.sig'])
+  ;<  where=(unit path)  bind:m  esplora-base
+  ?~  where  (pure:m ~)
   ::  scan recv chain (skip if already past it)
   ;<  ~  bind:m
     ?:  ?=(%chng phase.progress)  (pure:m ~)
@@ -1252,6 +1360,7 @@
       idx.progress
       gap.progress
       main-road
+      u.where
     ==
   ::  scan chng chain
   ;<  ~  bind:m
@@ -1261,6 +1370,7 @@
       ?:(?=(%chng phase.progress) idx.progress 0)
       ?:(?=(%chng phase.progress) gap.progress 0)
       main-road
+      u.where
     ==
   ::  clear registry entry
   ;<  reg=proc-registry  bind:m  load-registry
@@ -1316,8 +1426,10 @@
     =.  refresh.acct-procs  (~(del by refresh.acct-procs) rkey)
     =.  accounts.reg  (~(put by accounts.reg) acct-ref acct-procs)
     (save-registry reg)
+  ;<  where=(unit path)  bind:m  esplora-base
+  ?~  where  (pure:m ~)
   ;<  [new-info=(unit address-info) utxos=(list utxo) txs=(list transaction)]  bind:m
-    (fetch-address-data:aio addr.u.dat network)
+    (fetch-address-data:aio addr.u.dat network u.where)
   ;<  lbls=labels:b329  bind:m  load-labels
   =/  lbls=labels:b329
     ?~  new-info  lbls
@@ -1439,7 +1551,20 @@
   ?:  =('done' status)  (pure:m ~)
   =/  fp-key=@t
     (~(dog jo:json-utils prev) /fingerprint so:dejs:format)
-  =/  fp=@ux  (slav %ux fp-key)
+  ::  a proc json with no usable fingerprint is not a job this can run,
+  ::  and +slav on one CRASHES — which banged the fiber, which the next
+  ::  nexus reload respawned, which crashed again, for ever. Mark it done
+  ::  instead: a proc nobody can act on is finished, not retried.
+  =/  fp-some=(unit @ux)  (slaw %ux fp-key)
+  ?~  fp-some
+    ~&  >>>  [%wallet %discover %no-fingerprint fp-key]
+    ;<  cur=json  bind:m  (get-state-as:io json)
+    =/  updated=json
+      ?.  ?=(%o -.cur)  cur
+      [%o (~(put by p.cur) 'status' s+'done')]
+    ;<  ~  bind:m  (replace:io updated)
+    (pure:m ~)
+  =/  fp=@ux  u.fp-some
   =/  wxpub=@t
     (~(dog jo:json-utils prev) /wallet-xpub so:dejs:format)
   ;<  sec=secrets  bind:m  load-secrets
@@ -1938,28 +2063,19 @@
         (build-transaction:txb network 2 tx-inputs tx-outputs 0)
       =/  tx-hex-cord=@t  (crip tx-hex)
       ~&  >>  "tx hex: {<tx-hex-cord>}"
-      =/  broadcast-url=@t
-        ?-  network
-          %main      'https://mempool.space/api/tx'
-          %testnet3  'https://mempool.space/testnet/api/tx'
-          %testnet4  'https://mempool.space/testnet4/api/tx'
-          %signet    'https://mempool.space/signet/api/tx'
-          %regtest   'http://localhost:3000/tx'
-        ==
-      =/  =request:http
-        :*  %'POST'
-            broadcast-url
-            ~[['content-type' 'text/plain']]
-            `(as-octs:mimes:html tx-hex-cord)
-        ==
-      ;<  ~  bind:m  (send-request:io request)
-      ;<  =client-response:iris  bind:m  take-http:aio
-      =/  [ok=? broadcast-result=cord]
-        ?+  client-response  [%.n 'broadcast-failed']
-          [%finished [@ *] [~ [* [p=@ q=@]]]]
-        =/  status=@ud  status-code.response-header.client-response
-        [`?`=(200 status) q.data.u.full-file.client-response]
-        ==
+      ;<  where=(unit path)  bind:m  esplora-base
+      ;<  [ok=? broadcast-result=cord]  bind:m
+        =/  bm  (fiber:fiber:nexus ,[? cord])
+        ?~  where  (pure:bm [%.n 'no-esplora'])
+        ;<  ans=(each (map @t json) @tas)  bind:bm
+          (ask:esp u.where (broadcast:question:esp network tx-hex-cord))
+        ?:  ?=(%| -.ans)  (pure:bm [%.n (scot %tas p.ans)])
+        =/  said=?  =(`[%b %.y] (~(get by p.ans) 'ok'))
+        ::  the txid on success, whatever the node complained about
+        ::  otherwise — esplora answers both as a bare string
+        =/  body=json  (fall (~(get by p.ans) 'body') ~)
+        =/  txt=cord  ?.(?=([%s *] body) 'broadcast-failed' p.body)
+        (pure:bm [said txt])
       ~&  >>  "broadcast result: {<ok>} {<broadcast-result>}"
       ?.  ok
         ~&  >>>  "%build-transaction: broadcast failed, skipping notifications"
@@ -2147,16 +2263,14 @@
     ;<  ~  bind:m
       (send-simple:http-res:io eyre-id [[200 ~] `(as-octs:mimes:html '')])
     (pure:m ~)
-  ::  fetch address info from mempool
-  =/  base-url=tape  (mempool-base-url:aio vr-net)
-  =/  info-url=@t  (crip (weld base-url (trip addr)))
-  =/  =request:http
-    [%'GET' info-url ~[['Accept' 'application/json']] ~]
-  ;<  ~  bind:m  (send-request:io request)
-  ;<  resp=client-response:iris  bind:m  take-http:aio
+  ::  what the chain says about this address, asked of @esplora
+  ;<  where=(unit path)  bind:m  esplora-base
+  ;<  said=json  bind:m
+    ?~  where  (pure:(fiber:fiber:nexus ,json) ~)
+    (ask-body u.where (address:question:esp vr-net addr))
   ;<  now=@da  bind:m  get-time:io
   =/  info=(unit address-info)
-    (parse-info-response:aio resp now)
+    (parse-info-response:aio said now)
   =/  has-activity=?
     ?~  info  %.n
     (gth tx-count.u.info 0)
@@ -3448,6 +3562,8 @@
   |=  [xprv=@t =script-type network=?(%main %testnet3 %testnet4 %signet %regtest) chain=@ud]
   =/  m  (fiber:fiber:nexus ,?)
   ^-  form:m
+  ;<  where=(unit path)  bind:m  esplora-base
+  ?~  where  (pure:m %.n)
   =/  gap-limit=@ud  20
   =/  idx=@ud  0
   =/  gap=@ud  0
@@ -3456,48 +3572,17 @@
   ?:  (gte gap gap-limit)  (pure:m found)
   =/  addr=(unit @t)  (derive-acct-addr xprv script-type network chain idx)
   ?~  addr  (pure:m found)
-  =/  url=@t  (crip (weld (disc-mempool-url network) (trip u.addr)))
-  ;<  ~  bind:m  (send-request:io [%'GET' url ~[['Accept' 'application/json']] ~])
-  ;<  resp=client-response:iris  bind:m  disc-take-http
-  =/  tc=@ud  (disc-parse-tx-count resp)
+  ;<  said=json  bind:m  (ask-body u.where (address:question:esp network u.addr))
+  =/  tc=@ud  (disc-parse-tx-count said)
   ;<  ~  bind:m  (sleep:io `@dr`(div ~s1 1.000))
   ?:  (gth tc 0)
     $(idx +(idx), gap 0, found %.y)
   $(idx +(idx), gap +(gap))
 ::
-++  disc-mempool-url
-  |=  network=?(%main %testnet3 %testnet4 %signet %regtest)
-  ^-  tape
-  ?-  network
-    %main      "https://mempool.space/api/address/"
-    %testnet3  "https://mempool.space/testnet/api/address/"
-    %testnet4  "https://mempool.space/testnet4/api/address/"
-    %signet    "https://mempool.space/signet/api/address/"
-    %regtest   "http://localhost:3000/address/"
-  ==
-::
-++  disc-take-http
-  =/  m  (fiber:fiber:nexus ,client-response:iris)
-  ^-  form:m
-  |=  input:fiber:nexus
-  :+  ~  q.state
-  ?+  in  [%skip ~]
-      ~  [%wait ~]
-      [~ %poke * *]
-    ?.  =([/ %http-response] p.sage.u.in)  [%skip ~]
-    =/  resp=client-response:iris  !<(client-response:iris q.sage.u.in)
-    [%done resp]
-  ==
-::
 ++  disc-parse-tx-count
-  |=  =client-response:iris
+  |=  data=json
   ^-  @ud
-  ?.  ?=(%finished -.client-response)  0
-  ?~  full-file.client-response  0
-  =/  body=@t  q.data.u.full-file.client-response
-  =/  parsed=(each json tang)  (mule |.((need (de:json:html body))))
-  ?:  ?=(%| -.parsed)  0
-  (fall (mole |.((ni:dejs:format (~(got jo:json-utils p.parsed) /'chain_stats'/'tx_count')))) 0)
+  (fall (mole |.((ni:dejs:format (~(got jo:json-utils data) /'chain_stats'/'tx_count')))) 0)
 ::
 ++  form-args-to-json
   |=  args=key-value-list:kv:html-utils

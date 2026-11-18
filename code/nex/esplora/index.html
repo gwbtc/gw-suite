@@ -1,0 +1,55 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Esplora</title>
+<link rel="icon" type="image/svg+xml" href="/grubbery/esplora/icon.svg">
+<link rel="stylesheet" href="/grubbery/esplora/style.css">
+</head>
+<body>
+<header>
+  <img id="brand-icon" src="/grubbery/esplora/icon.svg" alt="">
+  <h1>Esplora</h1>
+  <span class="sub">the chain, asked of one stranger</span>
+  <span id="status"></span>
+  <button id="refresh" class="small" title="re-read config.json and the open questions">Refresh</button>
+</header>
+<main>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>Who this ship asks</h2>
+    </div>
+    <p class="explain">
+      Every app here asks this nexus instead of reaching the internet itself, so
+      one file decides who answers. An entry in <code>config.json</code> points a
+      network at your own Esplora; without one it falls back to the default.
+    </p>
+    <table id="providers">
+      <thead><tr><th>Network</th><th>Base url</th><th>Source</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </section>
+
+  <section class="panel">
+    <div class="panel-head">
+      <h2>In flight</h2>
+      <span id="waiting-count" class="muted"></span>
+    </div>
+    <p class="explain">
+      One grub per question under <code>ask/</code>. The asker makes it, this
+      nexus replaces it with the answer, and the asker culls it on collection —
+      so anything listed here is still being answered or has not been picked up.
+    </p>
+    <table id="waiting">
+      <thead><tr><th>Question</th><th>Asking</th><th>Network</th><th>State</th></tr></thead>
+      <tbody></tbody>
+    </table>
+    <p id="waiting-none" class="muted" hidden>No questions outstanding.</p>
+  </section>
+
+</main>
+<script src="/grubbery/esplora/app.js"></script>
+</body>
+</html>

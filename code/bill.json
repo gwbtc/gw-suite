@@ -1,1 +1,5 @@
-{"wallet.wallet_app": "/wallet/app", "nostr": "/nostr/app"}
+{
+  "wallet.wallet_app": "/wallet/app",
+  "nostr": "/nostr/app",
+  "esplora": "/esplora/app"
+}

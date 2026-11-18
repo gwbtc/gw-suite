@@ -1,0 +1,63 @@
+/* esplora nexus — the house style (see github, nostr), esplora teal. */
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: Inter, -apple-system, sans-serif;
+  font-size: 13px; line-height: 1.5;
+  background: #f6f7f9; color: #1f2328;
+  display: flex; flex-direction: column;
+  -webkit-font-smoothing: antialiased;
+}
+header {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 20px; background: white;
+  border-bottom: 1px solid #e4e7eb; flex-shrink: 0;
+}
+#brand-icon { width: 22px; height: 22px; border-radius: 6px; }
+h1 { font-size: 15px; font-weight: 650; letter-spacing: -0.01em; }
+header .sub { color: #79808a; font-size: 12px; }
+#status { margin-left: auto; font-size: 11px; color: #79808a; font-variant-numeric: tabular-nums; }
+
+main { padding: 20px; display: flex; flex-direction: column; gap: 16px; max-width: 920px; width: 100%; }
+
+.panel {
+  background: white; border: 1px solid #e4e7eb; border-radius: 8px;
+  padding: 16px 18px 18px;
+}
+.panel-head { display: flex; align-items: baseline; gap: 10px; }
+h2 { font-size: 13px; font-weight: 650; }
+.muted { color: #79808a; font-size: 12px; }
+.explain { color: #57606a; font-size: 12px; margin: 6px 0 12px; max-width: 70ch; }
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 11.5px;
+  background: #f0f2f4; border: 1px solid #e4e7eb; border-radius: 4px; padding: 0 4px;
+}
+
+table { border-collapse: collapse; width: 100%; }
+th, td { text-align: left; padding: 7px 10px; border-bottom: 1px solid #eef0f2; }
+th {
+  font-size: 10.5px; font-weight: 600; text-transform: uppercase;
+  letter-spacing: .04em; color: #79808a; border-bottom-color: #e4e7eb;
+}
+tbody tr:last-child td { border-bottom: none; }
+td.url, td.id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11.5px; color: #1f2328;
+}
+td.id { color: #57606a; }
+
+.pill {
+  font-size: 11px; padding: 2px 8px; border-radius: 999px;
+  background: #f0f2f4; color: #57606a; border: 1px solid #e4e7eb;
+}
+.pill.set { background: #e8f7f3; color: #0f6b57; border-color: #bfe8dd; }
+.pill.wait { background: #fff7e6; color: #8a5a00; border-color: #f3e0b5; }
+.pill.done { background: #e8f7f3; color: #0f6b57; border-color: #bfe8dd; }
+.pill.bad { background: #fff1f2; color: #a40e26; border-color: #f1b8bd; }
+
+button.small {
+  font: inherit; font-size: 12px; padding: 3px 10px; border-radius: 6px;
+  border: 1px solid #d5d9de; background: white; color: #1f2328; cursor: pointer;
+}
+button.small:hover { background: #f0f2f4; }
+[hidden] { display: none !important; }

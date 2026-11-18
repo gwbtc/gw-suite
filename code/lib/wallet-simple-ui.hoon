@@ -210,7 +210,9 @@
         ;+  (render-info-popup wal-seed wal-seed-masked saved fee-rate)
         ;+  render-tx-detail-popup
       ==
-      ;script(src "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js");
+      ::  vendored, not a cdn: this script runs in the page that draws
+      ::  receive addresses, so whoever serves it can read or rewrite one.
+      ;script(src "/groundwire/wallet/qrcode.min.js");
       ;+  render-js
     ==
   ==
@@ -1282,10 +1284,11 @@
     ;   var el = document.getElementById('fiat-value');
     ;   if (!el) return;
     ;   var sats = parseInt(el.dataset.sats, 10);
-    ;   fetch('https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd')
+    ;   fetch('/groundwire/wallet/price')
     ;     .then(function(r) { return r.json(); })
     ;     .then(function(d) {
-    ;       var price = d.bitcoin.usd;
+    ;       var price = d.usd;
+    ;       if (!price) return;
     ;       var usd = (sats / 100000000) * price;
     ;       var fmt = {style: 'currency', currency: 'USD'};
     ;       el.textContent = usd.toLocaleString('en-US', fmt);
