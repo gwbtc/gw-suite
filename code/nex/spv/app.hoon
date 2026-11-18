@@ -28,6 +28,8 @@
 /<  esp      /lib/wallet/esplora.hoon
 /<  nw       /lib/nexus-web.hoon
 /<  sh       /lib/shell.hoon
+/<  nex-tools  /lib/tools.hoon
+/&  bundle     /lib/spv-bundle/
 /<  ui-html  ./index.html
 /<  ui-js    ./app.js
 /<  ui-css   ./style.css
@@ -53,6 +55,7 @@
             :-  'peek'
             :-  %a
             :~  (line '@esplora/ask/' 'read the answers to its own questions')
+                (line '/sys/link/' 'find itself by name, @spv, from its tools')
             ==
             :-  'make'
             :-  %a
@@ -86,6 +89,9 @@
           [%fall %| /ask empty-dir:loader]
           [%over %& [/ %'sync.sig'] [[/ %sig] ~]]
           [%over %& [/ %'web.sig'] [[/ %sig] ~]]
+          ::  its tools, reachable over mcp the way the wallet's are:
+          ::  call_tool with path=/apps/<app>/tools
+          [%over %| /tools (seed-tools:nex-tools bundle)]
           [%fall %| /requests empty-dir:loader]
       ==
     ::
