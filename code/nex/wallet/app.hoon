@@ -70,6 +70,7 @@
                 (line '/sys/eyre/' 'bind /groundwire/wallet and serve the wallet UI')
                 (line '/sys/behn/' 'pace scans and refreshes, and keep the live pages open')
                 (line '@esplora/main.sig' 'open a question with the chain service')
+                (line '@spv/main.sig' 'ask whether a transaction is in a block this ship verified')
             ==
             :-  'peek'
             :-  %a
@@ -77,11 +78,13 @@
                 ::  makes it a tree: a bare '@esplora' grants the grub at
                 ::  that path, while '@esplora/' resolves to nothing at all
                 (line '@esplora/ask/' 'follow and read the answers to its own questions')
+                (line '@spv/ask/' 'read the verdicts it asked @spv for')
                 (line '/sys/link/' 'find itself by name, @wallet, from its procs and its tools')
             ==
             :-  'make'
             :-  %a
             :~  (line '@esplora/ask/' 'clear its own questions once it has read the answers')
+                (line '@spv/ask/' 'clear its own questions once it has read the verdicts')
             ==
         ==
       ::  tools added at runtime survive a reload: only /code/lib/tools of
@@ -629,6 +632,39 @@
             %+  send-simple:http-res:io  eyre-id
             :-  [200 ~[['content-type' 'application/json']]]
             `(as-octs:mimes:html (en:json:html cached))
+          (pure:m ~)
+        ::  route: /verify?txid= → is this transaction in a block this
+        ::  ship checked itself? Asks @spv, which holds no network road:
+        ::  the answer is a merkle branch folded against a header whose
+        ::  proof of work was tested here, not a provider's assurance.
+        ::
+        ::  "unverified" is not "false". A transaction older than @spv's
+        ::  checkpoint cannot be vouched for either way, and says so.
+        ?:  ?=([%verify ~] suffix)
+          =/  txid=@t  (fall (get-key:kv:html-utils 'txid' args) '')
+          ;<  out=json  bind:m
+            =/  n  (fiber:fiber:nexus ,json)
+            ?:  =('' txid)
+              (pure:n (pairs:enjs:format ~[['why' s+'no txid given']]))
+            ::  through here:sh, like every other read in a request
+            ::  fiber: a relative road to our own grant.json is not
+            ::  reachable from inside the sandbox
+            ;<  where=(unit path)  bind:n
+              %+  alias:esp
+                [%& %& (stab (crip nexus-root)) %'grant.json']
+              'spv'
+            ?~  where
+              (pure:n (pairs:enjs:format ~[['why' s+'no road to @spv']]))
+            ;<  ans=(each (map @t json) @tas)  bind:n
+              %+  ask:esp  u.where
+              (pairs:enjs:format ~[['op' s+'verify'] ['txid' s+txid]])
+            ?:  ?=(%| -.ans)
+              (pure:n (pairs:enjs:format ~[['why' s+(scot %tas p.ans)]]))
+            (pure:n [%o p.ans])
+          ;<  ~  bind:m
+            %+  send-simple:http-res:io  eyre-id
+            :-  [200 ~[['content-type' 'application/json']]]
+            `(as-octs:mimes:html (en:json:html out))
           (pure:m ~)
         ::  route: /qrcode.min.js → the vendored qr library. Served from
         ::  the desk so the signing page loads no third-party script.
@@ -1265,6 +1301,7 @@
   =/  m  (fiber:fiber:nexus ,(unit path))
   ^-  form:m
   (alias:esp (nex-road [%& ~ %'grant.json']) 'esplora')
+
 ::  +ask-body: the body of an @esplora answer, or ~ for anything else
 ::
 ++  ask-body
