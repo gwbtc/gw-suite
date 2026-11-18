@@ -70,6 +70,13 @@
           [%over %& [/ %'style.css'] [[/ %mime] ui-css]]
           [%over %& [/ %'tile.json'] [[/ %json] tile-json]]
           [%over %& [/ %'weir.json'] [[/ %json] weir-json]]
+          ::  what we asked and what came back, newest first, capped.
+          ::  A proxy that forgets is a proxy you cannot debug: when a
+          ::  provider starts rate-limiting mid-scan the wallet quietly
+          ::  keeps its old data, and without this nothing anywhere says
+          ::  why. Summaries only — the asker already got the body, and
+          ::  a txs response for a busy address is not worth keeping.
+          [%fall %& [/ %'activity.json'] [[/ %json] (pairs:enjs:format ~[['entries' [%a ~]]])]]
           ::  who to ask, per network. Empty means the defaults in
           ::  lib/wallet/esplora — mempool.space.
           [%fall %& [/ %'config.json'] [[/ %json] init:esp]]
@@ -271,6 +278,12 @@
       %regtest  %regtest
     ==
   ;<  conf=json  bind:m  (read:esp [%| 1 %& / %'config.json'])
+  ::  what SPV needs: a header by its hash, the hash at a height, the
+  ::  tip, and the merkle branch proving a txid sits in a block. All
+  ::  standard Esplora, so they work against any implementation.
+  =/  hash=@t    (jstr req 'hash')
+  =/  height=@t  (jstr req 'height')
+  =/  txid=@t    (jstr req 'txid')
   =/  url=(unit @t)
     ?+  op  ~
       %address    ?:(=('' address) ~ `(addr-url:esp conf network address))
@@ -278,6 +291,10 @@
       %txs        ?:(=('' address) ~ `(txs-url:esp conf network address))
       %price      `(price-url:esp conf)
       %broadcast  ?:(=('' tx) ~ `(tx-url:esp conf network))
+      %header     ?:(=('' hash) ~ `(header-url:esp conf network hash))
+      %block-at   ?:(=('' height) ~ `(height-url:esp conf network height))
+      %tip        `(tip-url:esp conf network)
+      %merkle     ?:(=('' txid) ~ `(merkle-url:esp conf network txid))
     ==
   ?~  url  (answer req %.n 0 'bad ask' ~)
   =/  =request:http
@@ -311,8 +328,36 @@
         ['error' s+err]
         ['body' (fall body ~)]
     ==
+  ;<  now=@da  bind:m  get-time:io
+  ;<  ~  bind:m
+    %-  append-activity
+    %-  pairs:enjs:format
+    :~  ['op' s+(jstr req 'op')]
+        ['network' s+(jstr req 'network')]
+        ['ok' b+ok]
+        ['code' (numb:enjs:format code)]
+        ['error' s+err]
+        ['at' s+(scot %da now)]
+    ==
   ;<  ~  bind:m  (replace:io out)
   stay:m
+::  +append-activity: one line per answered question, newest first,
+::  capped at 200 the way the github nexus caps its own.
+::
+++  append-activity
+  |=  entry=json
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  =road:tarball  [%| 1 %& / %'activity.json']
+  ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
+  =/  old=(list json)
+    ?~  cur  ~
+    ?.  ?=(%o -.u.cur)  ~
+    =/  e  (~(get by p.u.cur) 'entries')
+    ?.(?=([~ %a *] e) ~ p.u.e)
+  =/  new=json
+    (pairs:enjs:format ~[['entries' [%a (scag 200 `(list json)`[entry old])]]])
+  (over:io road [[/ %json] new])
 ::  +take-http: the one http response this fiber asked for
 ::
 ++  take-http

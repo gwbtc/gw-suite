@@ -86,6 +86,35 @@
   |=  conf=json
   ^-  @t
   (crip (weld (price-base conf) "/v1/prices"))
+::  +header-url, +height-url, +tip-url, +merkle-url: what SPV reads.
+::
+::    header   the 80-byte header of a block, as hex
+::    height   the hash of the block at a height
+::    tip      the height of the chain tip
+::    merkle   the branch proving a txid is in its block
+::
+::  All four are standard Esplora, unlike the price: any implementation
+::  serves them, so verification keeps working against your own node.
+::
+++  header-url
+  |=  [conf=json =network hash=@t]
+  ^-  @t
+  (crip :(weld (base conf network) "/block/" (trip hash) "/header"))
+::
+++  height-url
+  |=  [conf=json =network height=@t]
+  ^-  @t
+  (crip :(weld (base conf network) "/block-height/" (trip height)))
+::
+++  tip-url
+  |=  [conf=json =network]
+  ^-  @t
+  (crip (weld (base conf network) "/blocks/tip/height"))
+::
+++  merkle-url
+  |=  [conf=json =network txid=@t]
+  ^-  @t
+  (crip :(weld (base conf network) "/tx/" (trip txid) "/merkle-proof"))
 ::  +tx-url: where a signed transaction is POSTed
 ::
 ++  tx-url
@@ -228,6 +257,10 @@
   ++  txs        |=([=network addr=@t] (ask-body 'txs' network ~[['address' s+addr]]))
   ++  price      |=(~ (ask-body 'price' %main ~))
   ++  broadcast  |=([=network tx=@t] (ask-body 'broadcast' network ~[['tx' s+tx]]))
+  ++  header     |=([=network hash=@t] (ask-body 'header' network ~[['hash' s+hash]]))
+  ++  block-at   |=([=network h=@t] (ask-body 'block-at' network ~[['height' s+h]]))
+  ++  tip        |=(=network (ask-body 'tip' network ~))
+  ++  merkle     |=([=network txid=@t] (ask-body 'merkle' network ~[['txid' s+txid]]))
   --
 ::
 ++  ask-body
