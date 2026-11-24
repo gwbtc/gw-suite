@@ -113,6 +113,11 @@
           [%fall %& [/ %'labels.wallet_labels'] [[/wallet %labels] init-lbls]]
           [%fall %& [/ %'secrets.wallet_secrets'] [[/wallet %secrets] init-sec]]
           [%fall %& [/ %'drafts.wallet_drafts'] [[/wallet %drafts] *(map @t transaction:drft)]]
+          ::  signs.wallet_signs: per account, the draft signed and kept, not sent
+          [%fall %& [/ %'signs.wallet_signs'] [[/wallet %signs] *(map @t sign)]]
+          ::  results.wallet_results: per account, what the last build, sign
+          ::  or broadcast returned.
+          [%fall %& [/ %'results.wallet_results'] [[/wallet %results] *(map @t result)]]
           [%fall %& [/ %'ptsts.wallet_ptsts'] [[/wallet %ptsts] *(map @t ptst:taproot)]]
           [%fall %& [/ %'registry.wallet_registry'] [[/wallet %registry] *proc-registry]]
           [%fall %| /proc empty-dir:loader]
@@ -525,7 +530,7 @@
             $
           ::  account-specific actions (derive, scan, draft, etc)
           ::
-              ?(%'derive-address' %'derive-next' %'delete-address' %'set-network' %'full-scan' %'pause-scan' %'resume-scan' %'cancel-scan' %'refresh' %'send' %'add-output' %'delete-output' %'clear-draft' %'set-change-config' %'clear-change-config' %'set-auto-select-mode' %'run-auto-select' %'add-input' %'remove-input' %'build-transaction' %'add-tapscript' %'delete-tapscript')
+              ?(%'derive-address' %'derive-next' %'delete-address' %'set-network' %'full-scan' %'pause-scan' %'resume-scan' %'cancel-scan' %'refresh' %'send' %'add-output' %'delete-output' %'clear-draft' %'set-change-config' %'clear-change-config' %'set-auto-select-mode' %'run-auto-select' %'add-input' %'remove-input' %'build-transaction' %'sign-transaction' %'broadcast-signed' %'add-tapscript' %'delete-tapscript')
             =/  acct-ref=@t  (~(dog jo:json-utils jon) /account so:dejs:format)
             ;<  ~  bind:m  (handle-account-action:h jon acct-ref)
             $
@@ -2037,94 +2042,75 @@
     (save-draft acct-ref u.existing(modified now))
   ::
       %'build-transaction'
-    ?~  xprv  (pure:m ~)
-    ~&  >>  "=== BUILD AND BROADCAST TRANSACTION ==="
+    ::  sign draft and broadcast it at once;
+    =/  fail
+      |=  why=@t
+      (save-result acct-ref act `why ~)
+    ?~  xprv  (fail 'Watch-only account: no private key to sign')
     ;<  existing=(unit transaction:drft)  bind:m  (load-draft acct-ref)
-    ?~  existing
-      ~&  >>>  "no draft transaction"
-      (pure:m ~)
-    ?:  =(~ inputs.u.existing)
-      ~&  >>>  "no inputs in draft"
-      (pure:m ~)
-    ?:  =(~ outputs.u.existing)
-      ~&  >>>  "no outputs in draft"
-      (pure:m ~)
-    =/  [recv=(list [@ud address-data]) chng=(list [@ud address-data])]
-      (load-recv-chng lbls acct-ref)
-      =/  addr-lookup=(map @t [chain=@ud idx=@ud])
-        =/  m=(map @t [chain=@ud idx=@ud])  ~
-        =.  m
-          =/  entries=(list [@ud address-data])  recv
-          |-
-          ?~  entries  m
-          =.  m  (~(put by m) addr.+.i.entries [0 -.i.entries])
-          $(entries t.entries)
-        =/  entries=(list [@ud address-data])  chng
-        |-
-        ?~  entries  m
-        =.  m  (~(put by m) addr.+.i.entries [1 -.i.entries])
-        $(entries t.entries)
-      =/  utxo-to-addr=(map [@t @ud] @t)
-        =/  m=(map [@t @ud] @t)  ~
-        =/  all=(list [@ud address-data])  (weld recv chng)
-        |-
-        ?~  all  m
-        =/  [idx=@ud a=address-data]  i.all
-        =.  m
-          |-
-          ?~  utxos.a  m
-          =.  m  (~(put by m) [txid.i.utxos.a vout.i.utxos.a] addr.a)
-          $(utxos.a t.utxos.a)
-        $(all t.all)
-      =/  account-wallet  (from-extended:bip32 (trip u.xprv))
-      =/  tx-inputs=(list input:ap:tt:txb)
-        %+  turn  inputs.u.existing
-        |=  in=utxo-input:drft
-        =/  owner=(unit @t)  (~(get by utxo-to-addr) [txid.in vout.in])
-        ?~  owner  ~|("UTXO owner not found: {<txid.in>}:{<vout.in>}" !!)
-        =/  path=(unit [chain=@ud idx=@ud])  (~(get by addr-lookup) u.owner)
-        ?~  path  ~|("address path not found: {<u.owner>}" !!)
-        =/  derived  (derive:(derive:account-wallet chain.u.path) idx.u.path)
-        =/  privkey=@ux  prv.derived
-        =/  pubkey=@ux  (ser-p:derived pub.derived)
-        =/  txid-display=@ux  (rash txid.in hex)
-        =/  txid=@ux  dat:(flip:byt:bcu [32 txid-display])
-        =/  spend=spend-type:tt:txb
-          ?-  spend.in
-            %p2pkh        [%p2pkh ~]
-            %p2sh-p2wpkh  [%p2sh-p2wpkh ~]
-            %p2wpkh       [%p2wpkh ~]
-            %p2tr         [%p2tr %key-path ~]
-          ==
-        [privkey pubkey txid vout.in amount.in `@ud`0xffff.ffff spend]
-      =/  tx-outputs=(list output:ap:tt:txb)
-        (incorporate-change:drft u.existing)
-      ~&  >>  "building tx: {<(lent tx-inputs)>} inputs, {<(lent tx-outputs)>} outputs"
-      =/  tx-hex=tape
-        (build-transaction:txb network 2 tx-inputs tx-outputs 0)
-      =/  tx-hex-cord=@t  (crip tx-hex)
-      ~&  >>  "tx hex: {<tx-hex-cord>}"
-      ;<  where=(unit path)  bind:m  esplora-base
-      ;<  [ok=? broadcast-result=cord]  bind:m
-        =/  bm  (fiber:fiber:nexus ,[? cord])
-        ?~  where  (pure:bm [%.n 'no-esplora'])
-        ;<  ans=(each (map @t json) @tas)  bind:bm
-          (ask:esp u.where (broadcast:question:esp network tx-hex-cord))
-        ?:  ?=(%| -.ans)  (pure:bm [%.n (scot %tas p.ans)])
-        =/  said=?  =(`[%b %.y] (~(get by p.ans) 'ok'))
-        ::  the txid on success, whatever the node complained about
-        ::  otherwise — esplora answers both as a bare string
-        =/  body=json  (fall (~(get by p.ans) 'body') ~)
-        =/  txt=cord  ?.(?=([%s *] body) 'broadcast-failed' p.body)
-        (pure:bm [said txt])
-      ~&  >>  "broadcast result: {<ok>} {<broadcast-result>}"
-      ?.  ok
-        ~&  >>>  "%build-transaction: broadcast failed, skipping notifications"
-        (pure:m ~)
-      =/  out-addrs=(list @t)
-        (turn outputs.u.existing |=(o=output:drft address.o))
-      ;<  ~  bind:m  (notify-broadcast-recipients lbls broadcast-result out-addrs)
-      (delete-draft acct-ref)
+    ?~  existing  (fail 'There is no draft for this account')
+    =/  signed    (sign-draft u.existing lbls acct-ref u.xprv network ~ ~ ~)
+    ?:  ?=(%| -.signed)  (fail p.signed)
+    ;<  sent=(each @t @t)  bind:m  (broadcast-hex network hex.p.signed)
+    ?:  ?=(%| -.sent)  (fail p.sent)
+    =/  out-addrs=(list @t)
+      (turn outputs.u.existing |=(o=output:drft address.o))
+    ;<  ~  bind:m  (notify-broadcast-recipients lbls p.sent out-addrs)
+    ;<  ~  bind:m  (delete-draft acct-ref)
+    (save-result acct-ref act ~ `p.sent)
+  ::
+      %'sign-transaction'
+    ::  sign the draft and keep the result in signs.wallet_signs,
+    ::  replacing previous entry; takes optional version, locktime
+    ::  and sequence.
+    ::
+    =/  fail
+      |=  why=@t
+      (save-result acct-ref act `why ~)
+    ?~  xprv  (fail 'Watch-only account: no private key to sign')
+    ;<  existing=(unit transaction:drft)  bind:m  (load-draft acct-ref)
+    ?~  existing  (fail 'There is no draft for this account')
+    ::  left out is ~ (the default); present but not a whole number
+    ::  is refused
+    =/  num
+      |=  key=@t
+      ^-  (each (unit @ud) @t)
+      =/  v=(unit json)  (~(get by p.jon) key)
+      ?~  v  &+~
+      =/  n=(unit @ud)  ?.(?=([%n *] u.v) ~ (rush p.u.v dem))
+      ?~  n  |+(rap 3 ~[key ' must be a whole number, or left out as a default.'])
+      &+n
+    =/  version   (num 'version')
+    ?:  ?=(%| -.version)  (fail p.version)
+    =/  locktime  (num 'locktime')
+    ?:  ?=(%| -.locktime)  (fail p.locktime)
+    =/  sequence  (num 'sequence')
+    ?:  ?=(%| -.sequence)  (fail p.sequence)
+    =/  signed
+      %:  sign-draft
+        u.existing  lbls  acct-ref  u.xprv  network
+        p.version  p.locktime  p.sequence
+      ==
+    ?:  ?=(%| -.signed)  (fail p.signed)
+    ;<  ~  bind:m  (save-sign acct-ref p.signed)
+    (save-result acct-ref act ~ ~)
+  ::
+      %'broadcast-signed'
+    ::
+    =/  fail
+      |=  why=@t
+      (save-result acct-ref act `why ~)
+    ;<  existing=(unit transaction:drft)  bind:m  (load-draft acct-ref)
+    ?~  existing  (fail 'There is no draft for this account')
+    ;<  kept=(unit sign)  bind:m  (load-sign acct-ref)
+    ?~  kept  (fail 'Nothing signed to broadcast: sign first')
+    ;<  sent=(each @t @t)  bind:m  (broadcast-hex network hex.u.kept)
+    ?:  ?=(%| -.sent)  (fail p.sent)
+    =/  out-addrs=(list @t)
+      (turn outputs.u.existing |=(o=output:drft address.o))
+    ;<  ~  bind:m  (notify-broadcast-recipients lbls p.sent out-addrs)
+    ;<  ~  bind:m  (delete-draft acct-ref)
+     (save-result acct-ref act ~ `p.sent)
   ::
   ::  === Tapscript actions ===
   ::
@@ -2185,6 +2171,135 @@
     (pure:m ~)
   ==
 ::
+::  +sign-draft: sign a draft without sending it, returns a signed
+::  transaction or an error stored in result.
+::
+++  sign-draft
+  |=  $:  dr=transaction:drft
+          lbls=labels:b329
+          acct-ref=@t
+          xprv=@t
+          =network
+          version=(unit @ud)
+          locktime=(unit @ud)
+          sequence=(unit @ud)
+      ==
+  ^-  (each sign @t)
+  ?:  =(~ inputs.dr)   |+'Missing an input'
+  ?:  =(~ outputs.dr)  |+'Missing a recipient'
+  =/  ver=@ud  (fall version 2)
+  ?.  |(=(1 ver) =(2 ver))
+    |+(crip "Version {(a-co:co ver)} is not allowed")
+  =/  lock=@ud  (fall locktime 0)
+  ?.  (lth lock (bex 32))  |+'Locktime is too large'
+  ::  default sequence is 0xffff.ffff, unless locktime is set
+  ::  sequance 0xffff.fffe
+  =/  seq=@ud
+    ?^  sequence  u.sequence
+    ?:(=(0 lock) `@ud`0xffff.ffff `@ud`0xffff.fffe)
+  ?.  (lth seq (bex 32))  |+'Sequence is too large'
+  ?:  &((gth lock 0) =(`@ud`0xffff.ffff seq))
+    |+'A locktime needs a sequence below 0xffffffff'
+  ::  ensure every output, and the change, must be on the account's network
+  ::  preventing crash in +decode-outputs
+  =/  addrs=(list @t)
+    %+  weld  (turn outputs.dr |=(o=output:drft address.o))
+    ?~(change.dr ~ ~[address.u.change.dr])
+  =/  wrong=(list @t)
+    (skip addrs |=(a=@t (validate-address:txb a network)))
+  ?^  wrong
+    |+(rap 3 ~[i.wrong ' is not an address on ' network])
+  =/  broken=(list @t)
+    %+  skip  addrs
+    |=  a=@t
+    =/  decoded  (mule |.((decode-outputs:txb network ~[[a 0]])))
+    ?=(%& -.decoded)
+  ?^  broken
+    |+(rap 3 ~[i.broken ' is not a valid address'])
+  =/  res=(each (each sign @t) tang)
+    %-  mule  |.
+    ^-  (each sign @t)
+    =/  tx-outputs=(each (list output:ap:tt:txb) @t)
+      (incorporate-change:drft dr)
+    ?:  ?=(%| -.tx-outputs)  |+p.tx-outputs
+    =/  [recv=(list [@ud address-data]) chng=(list [@ud address-data])]
+      (load-recv-chng lbls acct-ref)
+    =/  addr-lookup=(map @t [chain=@ud idx=@ud])
+      =/  m=(map @t [chain=@ud idx=@ud])  ~
+      =.  m
+        =/  entries=(list [@ud address-data])  recv
+        |-
+        ?~  entries  m
+        =.  m  (~(put by m) addr.+.i.entries [0 -.i.entries])
+        $(entries t.entries)
+      =/  entries=(list [@ud address-data])  chng
+      |-
+      ?~  entries  m
+      =.  m  (~(put by m) addr.+.i.entries [1 -.i.entries])
+      $(entries t.entries)
+    =/  utxo-to-addr=(map [@t @ud] @t)
+      =/  m=(map [@t @ud] @t)  ~
+      =/  all=(list [@ud address-data])  (weld recv chng)
+      |-
+      ?~  all  m
+      =/  [idx=@ud a=address-data]  i.all
+      =.  m
+        |-
+        ?~  utxos.a  m
+        =.  m  (~(put by m) [txid.i.utxos.a vout.i.utxos.a] addr.a)
+        $(utxos.a t.utxos.a)
+      $(all t.all)
+    ::  each input with the key that signs it
+    =/  account-wallet  (from-extended:bip32 (trip xprv))
+    =/  tx-inputs
+      =/  tx-inputs  *(list input:ap:tt:txb)
+      |-  ^-  (each (list input:ap:tt:txb) @t)
+      ?~  inputs.dr  &+tx-inputs
+      =/  in  i.inputs.dr
+      =/  owner=(unit @t)  (~(get by utxo-to-addr) [txid.in vout.in])
+      ?~  owner  |+(crip "UTXO owner not found: {(trip txid.in)}:{<vout.in>}")
+      =/  path=(unit [chain=@ud idx=@ud])  (~(get by addr-lookup) u.owner)
+      ?~  path  |+(crip "Path not found for address: {<u.owner>}")
+      =/  derived  (derive:(derive:account-wallet chain.u.path) idx.u.path)
+      =/  privkey=@ux  prv.derived
+      =/  pubkey=@ux  (ser-p:derived pub.derived)
+      =/  txid-display=@ux  (rash txid.in hex)
+      =/  txid=@ux  dat:(flip:byt:bcu [32 txid-display])
+      =/  spend=spend-type:tt:txb
+        ?-  spend.in
+          %p2pkh        [%p2pkh ~]
+          %p2sh-p2wpkh  [%p2sh-p2wpkh ~]
+          %p2wpkh       [%p2wpkh ~]
+          %p2tr         [%p2tr %key-path ~]
+        ==
+      $(tx-inputs (snoc tx-inputs [privkey pubkey txid vout.in amount.in seq spend]), inputs.dr t.inputs.dr)
+    ::
+    ?:  ?=(%| -.tx-inputs)  |+p.tx-inputs
+    =/  in-sum=@ud  (sum-inputs:drft inputs.dr)
+    =/  out-total=@ud
+      (roll p.tx-outputs |=([o=output:ap:tt:txb sum=@ud] (add sum amount.o)))
+    =/  hex=@t  (crip (build-transaction:txb network ver p.tx-inputs p.tx-outputs lock))
+    &+[hex (sub in-sum out-total) ver lock seq]
+  ?:  ?=(%& -.res)  p.res
+  ::  coin txid or account key that could not be read
+  |+'Signing failed: failed to read coin or the account key'
+::  +broadcast-hex: send a signed transaction through @esplora;
+::
+++  broadcast-hex
+  |=  [=network hex=@t]
+  =/  m  (fiber:fiber:nexus ,(each @t @t))
+  ^-  form:m
+  ;<  where=(unit path)  bind:m  esplora-base
+  ?~  where  (pure:m |+'Wallet has no road to esplora')
+  ;<  ans=(each (map @t json) @tas)  bind:m
+    (ask:esp u.where (broadcast:question:esp network hex))
+  ?:  ?=(%| -.ans)
+    (pure:m |+(rap 3 ~['@esplora did not answer ' (scot %tas p.ans)]))
+  =/  body=json  (fall (~(get by p.ans) 'body') ~)
+  =/  txt=@t  ?.(?=([%s *] body) '' p.body)
+  ?:  =(`[%b %.y] (~(get by p.ans) 'ok'))  (pure:m &+txt)
+  %-  pure:m
+  |+(rap 3 ['Broadcast to network failed ' ?:(=('' txt) ~ [txt ~])])
 ::  +notify-broadcast-recipients: after broadcasting, poke ships
 ::  that offered us any of the output addresses
 ::
@@ -2654,6 +2769,7 @@
   |=  [acct-ref=@t dr=transaction:drft]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ;<  ~  bind:m  (delete-sign acct-ref)
   =/  rd=road:tarball  (nex-road [%& ~ %'drafts.wallet_drafts'])
   ;<  =view:nexus  bind:m  (peek:io rd ~)
   ?.  ?=([%file *] view)  (pure:m ~)
@@ -2665,12 +2781,76 @@
   |=  acct-ref=@t
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
+  ;<  ~  bind:m  (delete-sign acct-ref)
   =/  rd=road:tarball  (nex-road [%& ~ %'drafts.wallet_drafts'])
   ;<  =view:nexus  bind:m  (peek:io rd ~)
   ?.  ?=([%file *] view)  (pure:m ~)
   =/  drafts=(map @t transaction:drft)
     !<((map @t transaction:drft) (need-vase:tarball sang.view))
   (over:io rd [[/wallet %drafts] (~(del by drafts) acct-ref)])
+::  +load-sign: peek the signed transaction kept for an account
+::
+++  load-sign
+  |=  acct-ref=@t
+  =/  m  (fiber:fiber:nexus ,(unit sign))
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road [%& ~ %'signs.wallet_signs'])
+  ;<  =view:nexus  bind:m  (peek:io rd ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  signs=(map @t sign)
+    !<((map @t sign) (need-vase:tarball sang.view))
+  (pure:m (~(get by signs) acct-ref))
+::
+++  save-sign
+  |=  [acct-ref=@t sig=sign]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road [%& ~ %'signs.wallet_signs'])
+  ;<  =view:nexus  bind:m  (peek:io rd ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  signs=(map @t sign)
+    !<((map @t sign) (need-vase:tarball sang.view))
+  (over:io rd [[/wallet %signs] (~(put by signs) acct-ref sig)])
+::
+++  delete-sign
+  |=  acct-ref=@t
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road [%& ~ %'signs.wallet_signs'])
+  ;<  =view:nexus  bind:m  (peek:io rd ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  signs=(map @t sign)
+    !<((map @t sign) (need-vase:tarball sang.view))
+  ?.  (~(has by signs) acct-ref)  (pure:m ~)
+  (over:io rd [[/wallet %signs] (~(del by signs) acct-ref)])
+::  +load-result: peek an account's last result
+::
+++  load-result
+  |=  acct-ref=@t
+  =/  m  (fiber:fiber:nexus ,(unit result))
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road [%& ~ %'results.wallet_results'])
+  ;<  =view:nexus  bind:m  (peek:io rd ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  results=(map @t result)
+    !<((map @t result) (need-vase:tarball sang.view))
+  (pure:m (~(get by results) acct-ref))
+::  +save-result: result of build, sign or broadcast action;
+::
+++  save-result
+  |=  [acct-ref=@t act=@t error=(unit @t) txid=(unit @t)]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  ;<  now=@da  bind:m  get-time:io
+  =/  res=result  [act now error txid]
+  =/  m  (fiber:fiber:nexus ,~)
+  ^-  form:m
+  =/  rd=road:tarball  (nex-road [%& ~ %'results.wallet_results'])
+  ;<  =view:nexus  bind:m  (peek:io rd ~)
+  ?.  ?=([%file *] view)  (pure:m ~)
+  =/  results=(map @t result)
+    !<((map @t result) (need-vase:tarball sang.view))
+  (over:io rd [[/wallet %results] (~(put by results) acct-ref res)])
 ::  +send-sse-fragment: send a single SSE fragment targeting a DOM element
 ::
 ++  send-sse-fragment
@@ -2789,6 +2969,7 @@
   =/  draft-road=road:tarball  (nex-road [%& ~ %'drafts.wallet_drafts'])
   ;<  *  bind:m  (keep:io /send-stream lbl-road ~)
   ;<  *  bind:m  (keep:io /send-stream draft-road ~)
+  ;<  *  bind:m  (keep:io /send-stream (nex-road [%& ~ %'results.wallet_results']) ~)
   ;<  now=@da  bind:m  get-time:io
   ;<  ~  bind:m  (send-wait:io (add now ~s30))
   |-
@@ -2864,6 +3045,10 @@
     ::  send output list
     ;<  ~  bind:m
       (send-sse-fragment eyre-id 'output-list' (output-list-ui:acct-ui dr))
+    ::  send the last build or sign result
+    ;<  res=(unit result)  bind:m  (load-result ss-ref)
+    ;<  ~  bind:m
+      (send-sse-fragment eyre-id 'send-result' (result-ui:acct-ui res))
     $
   ==
 ::  +handle-addr-stream: SSE stream for address detail page

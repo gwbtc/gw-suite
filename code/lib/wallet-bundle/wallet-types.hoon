@@ -83,6 +83,24 @@
   $:  scan=(unit @ta)                  :: uuid of active scan proc
       refresh=(map @ta @ta)            :: "recv-0" -> uuid
   ==
+::  sign: a draft signed and kept, not sent
+::
++$  sign
+  $:  hex=@t
+      fee=@ud
+      version=@ud
+      locktime=@ud
+      sequence=@ud
+  ==
+::  result: what an account's last build, sign or broadcast did, kept
+::  per account
+::
++$  result
+  $:  action=@tas
+      at=@da
+      error=(unit @t)
+      txid=(unit @t)
+  ==
 +$  network  ?(%main %testnet3 %testnet4 %signet %regtest)
 ::  +to-bip-network: map expanded network to bip32/bech32 protocol network
 ::

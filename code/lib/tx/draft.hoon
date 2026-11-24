@@ -120,20 +120,23 @@
   ?>  (is-p2pkh-address addr)            %p2pkh
 ::  +incorporate-change: Add change output to draft if applicable
 ::
-::  Crashes if insufficient funds (caller should validate first).
+::  The outputs to sign, or error message.
 ::  Absorbs dust change into fee silently.
 ::
 ++  incorporate-change
   |=  draft=transaction
-  ^-  (list output)
-  ::  No change configured - return outputs as-is
-  ::
-  ?~  change.draft
-    outputs.draft
+  ^-  (each (list output) @t)
   ::  Sum up inputs and outputs
   ::
   =/  total-inputs=@ud   (sum-inputs inputs.draft)
   =/  total-outputs=@ud  (sum-outputs outputs.draft)
+  ::  review: maybe add 'short (a-co:co shortfall.result)'
+  =/  insufficient-log   |+'Insufficient input amount'
+  ::  No change configured - outputs as-is, if the coins cover them
+  ::
+  ?~  change.draft
+    ?:  (lth total-inputs total-outputs)  insufficient-log
+    &+outputs.draft
   ::  Calculate transaction size and fee
   ::
   =/  vbytes=@ud  (calculate-vbytes draft)
@@ -145,8 +148,8 @@
   ::  Handle result
   ::
   ?-  -.result
-    %insufficient  !!                 ::  caller bug - should validate first
-    %dust          outputs.draft      ::  absorb into fee
-    %ok            (snoc outputs.draft [address.u.change.draft amount.result])
+    %insufficient   insufficient-log
+    %dust           &+outputs.draft       ::  absorb into fee
+    %ok             &+(snoc outputs.draft [address.u.change.draft amount.result])
   ==
 --
