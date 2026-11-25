@@ -653,6 +653,16 @@
         $(idx +(idx), remaining t.remaining)
   ==
 ::
+++  result-ui
+  |=  res=(unit result)
+  ^-  manx
+  ?~  res  ;div;
+  ?^  error.u.res
+    ;div.p3.br2.f3(style "margin-top: 12px; border: 1px solid rgba(255, 100, 100, 0.5); background: rgba(255, 100, 100, 0.12);"): {(trip u.error.u.res)}
+  ?:  =(%sign-transaction action.u.res)
+    ;div.p3.br2.f3(style "margin-top: 12px; border: 1px solid var(--b3);"): Signed and kept, not sent.
+  ;div.p3.br2.f3(style "margin-top: 12px; border: 1px solid rgba(100, 200, 100, 0.5);"): Sent. txid {(trip (fall txid.u.res ''))}.
+::
 ++  change-section-ui
   |=  [has-cfg=? fee-rate=@ud est-fee=@ud est-vbytes=@ud change-result=change-result:fees next-chg=(unit @t)]
   ^-  manx
@@ -1164,6 +1174,7 @@
             ;span.f2: Send
           ==
         ==
+        ;div#send-result;
       ==
       ;+  (send-scripts-ui nexus-root next-chg-tape key-hex key-hex)
     ==
