@@ -1,0 +1,1 @@
+{"poke": [{"road": "/sys/bowl.sig", "why": "the entropy every outbound request is tagged with"}, {"road": "/sys/iris/", "why": "read the chain from an esplora api, and broadcast there"}, {"road": "/sys/eyre/", "why": "bind /grubbery/esplora and serve the page"}], "peek": []}
