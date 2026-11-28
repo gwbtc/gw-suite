@@ -215,10 +215,10 @@
   (fall (de:json:html (crip (trip q.q.defaults-mime))) [%o ~])
 ++  default-relays
   ^-  (list @t)
-  (murn (jarr defaults 'relays') |=(u=json ?:(?=([%s *] u) `p.u ~)))
+  (murn (~(get-array jo:json-utils defaults) 'relays') |=(u=json ?:(?=([%s *] u) `p.u ~)))
 ++  default-follows
   ^-  (list @t)
-  (murn (jarr defaults 'follows') |=(u=json ?:(?=([%s *] u) `p.u ~)))
+  (murn (~(get-array jo:json-utils defaults) 'follows') |=(u=json ?:(?=([%s *] u) `p.u ~)))
 ++  default-config
   ^-  json
   %-  pairs:enjs:format
@@ -247,7 +247,7 @@
   =/  m  (fiber:fiber:nexus ,@ud)
   ^-  form:m
   ;<  cfg=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& / %'config.json']) ,json)
-  =/  n=@ud  (jnum (fall cfg [%o ~]) 'interval' 120)
+  =/  n=@ud  (~(get-number jo:json-utils (fall cfg [%o ~])) 'interval' 120)
   (pure:m (max 15 n))
 ::  +sleep-or-poke: wait out the interval, or wake early on any poke.
 ::  A timer wake arrives as a poke of [/ %timer-wake] from behn; a
@@ -301,7 +301,7 @@
   =/  m  (fiber:fiber:nexus ,(list @t))
   ^-  form:m
   ;<  cfg=json  bind:m  (read-config rail)
-  =/  l=(list @t)  (murn (jarr cfg 'relays') |=(u=json ?:(?=([%s *] u) `p.u ~)))
+  =/  l=(list @t)  (murn (~(get-array jo:json-utils cfg) 'relays') |=(u=json ?:(?=([%s *] u) `p.u ~)))
   (pure:m ?~(l default-relays l))
 ++  read-config
   |=  =rail:tarball
@@ -339,7 +339,7 @@
 ++  pks-of
   |=  f=json
   ^-  (list @t)
-  (murn (jarr f 'pubkeys') |=(p=json ?:(?=([%s *] p) `p.p ~)))
+  (murn (~(get-array jo:json-utils f) 'pubkeys') |=(p=json ?:(?=([%s *] p) `p.p ~)))
 ++  follows-doc
   |=  pks=(list @t)
   ^-  json
@@ -400,7 +400,7 @@
     (peek-as:io (nex-road:io rail [%& /relays (cat 3 host '.json')]) ,json)
   ::  carry the cursor until this session sends its own REQ, so a
   ::  session that fails to connect does not zero it for the next
-  =.  st  st(started (jnum (fall prev [%o ~]) 'started' 0))
+  =.  st  st(started (~(get-number jo:json-utils (fall prev [%o ~])) 'started' 0))
   ;<  ~  bind:m  (report st(stage 'connecting'))
   ::  a relay that never answers the handshake would park us forever;
   ::  30s is generous for a websocket upgrade
@@ -420,7 +420,7 @@
   =/  now-unix=@ud  (div (sub now ~1970.1.1) ~s1)
   =/  newest=@ud  (roll (turn ~(val by idx) |=([t=@ud *] t)) max)
   =/  since=@ud
-    ?:  =(0 newest)  (sub now-unix (mul 86.400 (jnum cfg 'backfill_days' 30)))
+    ?:  =(0 newest)  (sub now-unix (mul 86.400 (~(get-number jo:json-utils cfg) 'backfill_days' 30)))
     newest
   ::  profiles change rarely: ask only for ones newer than the last
   ::  session's start (from our own status grub), else every frame of
@@ -476,12 +476,12 @@
       ;<  ~  bind:m  (report st(stage 'closed'))
       (pure:m ?:(eose %ok %fail))
     ?:  ?=(%cmd -.in)
-      =/  action=@t  (jstr jon.in 'action')
+      =/  action=@t  (~(get-string jo:json-utils jon.in) 'action')
       ?:  =('send' action)
-        =/  road=road:tarball  (nex-road:io rail [%& /outbox (cat 3 (jstr jon.in 'id') '.json')])
+        =/  road=road:tarball  (nex-road:io rail [%& /outbox (cat 3 (~(get-string jo:json-utils jon.in) 'id') '.json')])
         ;<  ob=(unit json)  bind:m  (peek-as:io road ,json)
         ?~  ob  $
-        =/  frame=@t  (en:json:html [%a ~[s+'EVENT' (jget u.ob 'event')]])
+        =/  frame=@t  (en:json:html [%a ~[s+'EVENT' (~(get-object jo:json-utils u.ob) 'event')]])
         ;<  ~  bind:m  (ws-send:io u.wid frame)
         =.  st  (note-frame st '> ' frame)
         ;<  ~  bind:m  (report st)
@@ -489,7 +489,7 @@
       ?:  =('fetch' action)
         ::  an extra subscription for what points at one event; its EOSE
         ::  closes it (below), so the socket keeps only the timeline sub
-        =/  target=@t  (jstr jon.in 'id')
+        =/  target=@t  (~(get-string jo:json-utils jon.in) 'id')
         ?:  =('' target)  $
         =/  frame=@t  (req-thread target)
         ;<  ~  bind:m  (ws-send:io u.wid frame)
@@ -498,7 +498,7 @@
         $
       ?:  =('fetch-tag' action)
         ::  posts under one hashtag, one-shot (NIP-12 #t filter)
-        =/  t=(unit @t)  (clean-tag (jstr jon.in 'tag'))
+        =/  t=(unit @t)  (clean-tag (~(get-string jo:json-utils jon.in) 'tag'))
         ?~  t  $
         =/  frame=@t
           %-  en:json:html
@@ -517,8 +517,8 @@
       ?:  =('fetch-many' action)
         ::  fill in the gaps at once: profiles for a list of authors, and
         ::  roots (plus what points at them) for a list of ids; one-shot
-        =/  authors=(list @t)  (jstrs jon.in 'authors')
-        =/  ids=(list @t)  (jstrs jon.in 'ids')
+        =/  authors=(list @t)  (~(get-strings jo:json-utils jon.in) 'authors')
+        =/  ids=(list @t)  (~(get-strings jo:json-utils jon.in) 'ids')
         ;<  ~  bind:m
           ?:  =(~ authors)  (pure:(fiber:fiber:nexus ,~) ~)
           (ws-send:io u.wid (en:json:html [%a ~[s+'REQ' s+'fill-p' (filter ~[0] authors ~)]]))
@@ -536,7 +536,7 @@
         $
       ?:  =('fetch-author' action)
         ::  one person's profile and recent posts, one-shot
-        =/  pk=@t  (jstr jon.in 'pubkey')
+        =/  pk=@t  (~(get-string jo:json-utils jon.in) 'pubkey')
         ?:  =('' pk)  $
         =/  subid=@t  (cat 3 'fetch-' (end [3 12] pk))
         =/  frame=@t
@@ -554,7 +554,7 @@
         ;<  ~  bind:m  (report st)
         $
       ?:  =('raw' action)
-        =/  frame=@t  (jstr jon.in 'text')
+        =/  frame=@t  (~(get-string jo:json-utils jon.in) 'text')
         ?:  =('' frame)  $
         ;<  ~  bind:m  (ws-send:io u.wid frame)
         =.  st  (note-frame st '> ' frame)
@@ -606,25 +606,25 @@
   ?~  parts  (pure:m %ok)
   =/  tag=@t  ?:(?=([%s *] i.parts) p.i.parts '')
   ?:  =('EOSE' tag)
-    =/  subid=@t  (jstr-at parts 1)
+    =/  subid=@t  (~(get-string-at ja:json-utils parts) 1)
     ?:  |(=('timeline' subid) =('' subid))  (pure:m %eose-timeline)
     ::  a one-shot subscription closes on its EOSE
     ;<  ~  bind:m  (ws-send:io wid (en:json:html [%a ~[s+'CLOSE' s+subid]]))
     (pure:m %ok)
   ?:  =('CLOSED' tag)
-    (pure:m ?:(=('timeline' (jstr-at parts 1)) %closed-timeline %ok))
+    (pure:m ?:(=('timeline' (~(get-string-at ja:json-utils parts) 1)) %closed-timeline %ok))
   ?:  =('OK' tag)
-    ;<  ~  bind:m  (record-ok rail host (jstr-at parts 1) (jbool-at parts 2) (jstr-at parts 3))
+    ;<  ~  bind:m  (record-ok rail host (~(get-string-at ja:json-utils parts) 1) (~(get-bool-at ja:json-utils parts) 2 %.n) (~(get-string-at ja:json-utils parts) 3))
     (pure:m %ok)
   ?.  =('EVENT' tag)  (pure:m %ok)
   ?.  ?=([* * * ~] parts)  (pure:m %ok)
   =/  ev=json  i.t.t.parts
-  =/  kind=@ud  (jnum ev 'kind' 1)
+  =/  kind=@ud  (~(get-number jo:json-utils ev) 'kind' 1)
   ?:  =(0 kind)
-    ;<  ~  bind:m  (put-profile rail (jstr ev 'pubkey') ev)
+    ;<  ~  bind:m  (put-profile rail (~(get-string jo:json-utils ev) 'pubkey') ev)
     (pure:m %ok)
   ?.  ?=(?(%1 %6 %7 %5) kind)  (pure:m %ok)
-  =/  id=@t  (jstr ev 'id')
+  =/  id=@t  (~(get-string jo:json-utils ev) 'id')
   ?:  =('' id)  (pure:m %ok)
   =/  road=road:tarball  (nex-road:io rail [%& /events (cat 3 id '.json')])
   ;<  have=?  bind:m  (peek-exists:io road)
@@ -655,7 +655,7 @@
   ;<  idx=feed-idx  bind:m  (load-index rail)
   =/  seen-road=road:tarball  (nex-road:io rail [%& / %'index.json'])
   ;<  sj=(unit json)  bind:m  (peek-as:io seen-road ,json)
-  =/  seen=(set @t)  (silt (jstrs (fall sj [%o ~]) 'skip'))
+  =/  seen=(set @t)  (silt (~(get-strings jo:json-utils (fall sj [%o ~])) 'skip'))
   ;<  v=view:nexus  bind:m  (peek-shallow:io (nex-road:io rail [%| /events]) ~)
   =/  fresh=(list @t)
     ?.  ?=([%ball *] v)  ~
@@ -671,7 +671,7 @@
   =|  done=(list @t)
   |-
   ?~  fresh
-    ;<  ~  bind:m  (save-index rail idx (jnum cfg 'keep' 500))
+    ;<  ~  bind:m  (save-index rail idx (~(get-number jo:json-utils cfg) 'keep' 500))
     =/  next-seen=(list @t)  (scag 5.000 (weld done ~(tap in seen)))
     =/  doc=json  (pairs:enjs:format ~[['skip' [%a (turn next-seen |=(i=@t s+i))]]])
     ?^  sj  (over:io seen-road [[/ %json] doc])
@@ -680,13 +680,13 @@
   ;<  ev=(unit json)  bind:m
     (peek-as:io (nex-road:io rail [%& /events (cat 3 i.fresh '.json')]) ,json)
   ?~  ev  $(fresh t.fresh, done [i.fresh done])
-  =/  kind=@ud  (jnum u.ev 'kind' 0)
+  =/  kind=@ud  (~(get-number jo:json-utils u.ev) 'kind' 0)
   ;<  gone=(list @t)  bind:m
     ?.  =(5 kind)  (pure:(fiber:fiber:nexus ,(list @t)) ~)
     (apply-deletion rail u.ev)
   =.  idx  (roll gone |=([i=@t acc=_idx] (~(del by acc) i)))
   =?  idx  ?=(?(%1 %6) kind)
-    (~(put by idx) i.fresh [(jnum u.ev 'created_at' 0) (jstr u.ev 'pubkey')])
+    (~(put by idx) i.fresh [(~(get-number jo:json-utils u.ev) 'created_at' 0) (~(get-string jo:json-utils u.ev) 'pubkey')])
   ;<  ~  bind:m  (note-author rail u.ev)
   ;<  ~  bind:m  (note-refs rail u.ev)
   ;<  ~  bind:m  (note-tags rail u.ev)
@@ -794,7 +794,7 @@
         ['message' s+msg]
         ['at' (numb:enjs:format (div (sub now ~1970.1.1) ~s1))]
     ==
-  =/  relays=json  (jget u.ob 'relays')
+  =/  relays=json  (~(get-object jo:json-utils u.ob) 'relays')
   =/  relays=json  [%o (~(put by ?.(?=([%o *] relays) ~ p.relays)) host verdict)]
   (over:io road [[/ %json] [%o (~(put by p.u.ob) 'relays' relays)]])
 ::  ---------------------------------------------------------------------
@@ -818,7 +818,7 @@
   =/  m  (fiber:fiber:nexus ,(unit @t))
   ^-  form:m
   ;<  me=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& / %'me.json']) ,json)
-  =/  cur=@t  (jstr (fall me [%o ~]) 'current')
+  =/  cur=@t  (~(get-string jo:json-utils (fall me [%o ~])) 'current')
   ?.  =('' cur)  (pure:m `cur)
   ::  nothing current: an old me/ may still be there to migrate, or
   ::  there may be accounts and no choice yet — take the first
@@ -851,11 +851,11 @@
   ^-  form:m
   ;<  sec=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /me %'secret.json']) ,json)
   ?~  sec  (pure:m ~)
-  =/  priv=(unit @ux)  (parse-hex:nl (jstr u.sec 'privkey'))
+  =/  priv=(unit @ux)  (parse-hex:nl (~(get-string jo:json-utils u.sec) 'privkey'))
   ?~  priv  (pure:m ~)
   ;<  idn=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /me %'identity.json']) ,json)
   ;<  prof=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /me %'profile.json']) ,json)
-  =/  since=@ud  (jnum (fall idn [%o ~]) 'since' 0)
+  =/  since=@ud  (~(get-number jo:json-utils (fall idn [%o ~])) 'since' 0)
   ;<  pk=(unit @t)  bind:m  (add-account rail u.priv since (fall prof [%o ~]))
   ?~  pk  (pure:m ~)
   ;<  *  bind:m  (cull-soft:io (nex-road:io rail [%& /me %'secret.json']))
@@ -898,7 +898,7 @@
   ?~  cur  (pure:m ~)
   ;<  sec=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& (acct u.cur) %'secret.json']) ,json)
   ?~  sec  (pure:m ~)
-  =/  priv=(unit @ux)  (parse-hex:nl (jstr u.sec 'privkey'))
+  =/  priv=(unit @ux)  (parse-hex:nl (~(get-string jo:json-utils u.sec) 'privkey'))
   ?~  priv  (pure:m ~)
   (pure:m `[x:(priv-to-pub:secp256k1:secp:crypto u.priv) u.priv])
 ::  +generate-identity: a fresh keypair as a new account, made current
@@ -923,8 +923,8 @@
   =/  row=json
     %-  pairs:enjs:format
     :~  ['pubkey' s+i.pks]
-        ['npub' s+(jstr (fall idn [%o ~]) 'npub')]
-        ['since' (numb:enjs:format (jnum (fall idn [%o ~]) 'since' 0))]
+        ['npub' s+(~(get-string jo:json-utils (fall idn [%o ~])) 'npub')]
+        ['since' (numb:enjs:format (~(get-number jo:json-utils (fall idn [%o ~])) 'since' 0))]
         ['profile' (fall prof [%o ~])]
         ['current' b+=(cur `i.pks)]
     ==
@@ -941,7 +941,7 @@
   ;<  eny=@uvJ  bind:m  get-entropy:io
   =/  at=@ud  (div (sub now ~1970.1.1) ~s1)
   =/  ev=json  (make-event:nl u.k at kind tags content eny)
-  =/  id=@t  (jstr ev 'id')
+  =/  id=@t  (~(get-string jo:json-utils ev) 'id')
   =/  doc=json
     (pairs:enjs:format ~[['event' ev] ['relays' [%o ~]] ['at' (numb:enjs:format at)]])
   ;<  err=(unit tang)  bind:m
@@ -1076,7 +1076,7 @@
 ++  tags
   |=  ev=json
   ^-  (list (list @t))
-  %+  turn  (jarr ev 'tags')
+  %+  turn  (~(get-array jo:json-utils ev) 'tags')
   |=(t=json ?.(?=([%a *] t) ~ (murn p.t |=(x=json ?:(?=([%s *] x) `p.x ~)))))
 ::  +e-refs: what an event points at (NIP-10). root = the e tag marked
 ::  "root", else the first e tag; parent = the one marked "reply", else
@@ -1110,7 +1110,7 @@
   |=  [=rail:tarball del=json]
   =/  m  (fiber:fiber:nexus ,(list @t))
   ^-  form:m
-  =/  who=@t  (jstr del 'pubkey')
+  =/  who=@t  (~(get-string jo:json-utils del) 'pubkey')
   =/  ids=(list @t)
     %+  murn  (tags del)
     |=(t=(list @t) ?.(?=([%e @ *] t) ~ `i.t.t))
@@ -1120,8 +1120,8 @@
   =/  road=road:tarball  (nex-road:io rail [%& /events (cat 3 i.ids '.json')])
   ;<  ev=(unit json)  bind:m  (peek-as:io road ,json)
   ?~  ev  $(ids t.ids)
-  ?.  =(who (jstr u.ev 'pubkey'))  $(ids t.ids)
-  =/  kind=@ud  (jnum u.ev 'kind' 1)
+  ?.  =(who (~(get-string jo:json-utils u.ev) 'pubkey'))  $(ids t.ids)
+  =/  kind=@ud  (~(get-number jo:json-utils u.ev) 'kind' 1)
   ;<  ~  bind:m  (unnote-refs rail u.ev)
   ;<  *  bind:m  (cull-soft:io road)
   ~&  [%nostr %deleted i.ids %kind kind %by (end [3 12] who)]
@@ -1132,18 +1132,18 @@
   |=  [=rail:tarball ev=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  =/  kind=@ud  (jnum ev 'kind' 1)
+  =/  kind=@ud  (~(get-number jo:json-utils ev) 'kind' 1)
   ?.  ?=(?(%1 %6 %7) kind)  (pure:m ~)
   =/  refs=(unit [root=@t parent=@t])  (e-refs ev)
   ?~  refs  (pure:m ~)
   =/  under=@t  ?:(=(1 kind) root.u.refs parent.u.refs)
   =/  field=@t  ?+(kind 'replies' %6 'reposts', %7 'reactions')
-  =/  id=@t  (jstr ev 'id')
+  =/  id=@t  (~(get-string jo:json-utils ev) 'id')
   =/  road=road:tarball  (nex-road:io rail [%& /refs (cat 3 under '.json')])
   ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
   ?~  cur  (pure:m ~)
   ?.  ?=([%o *] u.cur)  (pure:m ~)
-  =/  kept=(list json)  (skip (jarr u.cur field) |=(j=json =(id (jstr j 'id'))))
+  =/  kept=(list json)  (skip (~(get-array jo:json-utils u.cur) field) |=(j=json =(id (~(get-string jo:json-utils j) 'id'))))
   (over:io road [[/ %json] [%o (~(put by p.u.cur) field [%a kept])]])
 ::  +note-refs: file one event's pointers. A reply goes under its thread
 ::  root (with its parent, so a tree can be built); a repost or reaction
@@ -1152,7 +1152,7 @@
   |=  [=rail:tarball ev=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  =/  kind=@ud  (jnum ev 'kind' 1)
+  =/  kind=@ud  (~(get-number jo:json-utils ev) 'kind' 1)
   ::  only replies, reposts and reactions are references; a kind 5
   ::  (deletion request) also carries e tags but is not one
   ?.  ?=(?(%1 %6 %7) kind)  (pure:m ~)
@@ -1163,23 +1163,23 @@
     %-  pairs:enjs:format
     %+  weld
       ^-  (list [@t json])
-      :~  ['id' s+(jstr ev 'id')]
-          ['pubkey' s+(jstr ev 'pubkey')]
-          ['at' (numb:enjs:format (jnum ev 'created_at' 0))]
+      :~  ['id' s+(~(get-string jo:json-utils ev) 'id')]
+          ['pubkey' s+(~(get-string jo:json-utils ev) 'pubkey')]
+          ['at' (numb:enjs:format (~(get-number jo:json-utils ev) 'created_at' 0))]
       ==
     ^-  (list [@t json])
     ?+  kind  ~
       %1  ~[['parent' s+parent.u.refs]]
-      %7  ~[['content' s+(jstr ev 'content')]]
+      %7  ~[['content' s+(~(get-string jo:json-utils ev) 'content')]]
     ==
   =/  field=@t  ?+(kind 'replies' %6 'reposts', %7 'reactions')
   =/  road=road:tarball  (nex-road:io rail [%& /refs (cat 3 under '.json')])
   ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
   =/  doc=json  (fall cur (pairs:enjs:format ~[['replies' [%a ~]] ['reposts' [%a ~]] ['reactions' [%a ~]]]))
   ?.  ?=([%o *] doc)  (pure:m ~)
-  =/  have=(list json)  (jarr doc field)
+  =/  have=(list json)  (~(get-array jo:json-utils doc) field)
   ::  one fact per event: a reference seen from a second relay is not new
-  ?:  (lien have |=(j=json =((jstr j 'id') (jstr ev 'id'))))  (pure:m ~)
+  ?:  (lien have |=(j=json =((~(get-string jo:json-utils j) 'id') (~(get-string jo:json-utils ev) 'id'))))  (pure:m ~)
   =/  next=json  [%o (~(put by p.doc) field [%a (snoc have entry)])]
   ?^  cur  (over:io road [[/ %json] next])
   ;<  err=(unit tang)  bind:m  (make-soft:io road |+[[[/ %json] next] ~])
@@ -1197,14 +1197,14 @@
   ;<  refs=json  bind:m  (read-refs rail i.ids)
   =/  acts=(list [kind=@ud j=json])
     %+  weld
-      (turn (jarr refs 'reposts') |=(j=json [6 j]))
-    (turn (jarr refs 'reactions') |=(j=json [7 j]))
+      (turn (~(get-array jo:json-utils refs) 'reposts') |=(j=json [6 j]))
+    (turn (~(get-array jo:json-utils refs) 'reactions') |=(j=json [7 j]))
   ;<  [rows=(list json) profs=(map @t json)]  bind:m
     =/  m  (fiber:fiber:nexus ,[(list json) (map @t json)])
     =|  rows=(list json)
     |-  ^-  form:m
     ?~  acts  (pure:m [(flop rows) profs])
-    =/  pk=@t  (jstr j.i.acts 'pubkey')
+    =/  pk=@t  (~(get-string jo:json-utils j.i.acts) 'pubkey')
     ;<  prof=json  bind:m
       ?^  hit=(~(get by profs) pk)  (pure:(fiber:fiber:nexus ,json) u.hit)
       ;<  p=(unit json)  bind:(fiber:fiber:nexus ,json)
@@ -1213,13 +1213,13 @@
     =/  row=json
       %-  pairs:enjs:format
       :~  ['on' s+i.ids]
-          ['id' s+(jstr j.i.acts 'id')]
+          ['id' s+(~(get-string jo:json-utils j.i.acts) 'id')]
           ['kind' (numb:enjs:format kind.i.acts)]
           ['pubkey' s+pk]
-          ['name' s+(jstr prof 'name')]
-          ['picture' s+(jstr prof 'picture')]
-          ['content' s+(jstr j.i.acts 'content')]
-          ['at' (numb:enjs:format (jnum j.i.acts 'at' 0))]
+          ['name' s+(~(get-string jo:json-utils prof) 'name')]
+          ['picture' s+(~(get-string jo:json-utils prof) 'picture')]
+          ['content' s+(~(get-string jo:json-utils j.i.acts) 'content')]
+          ['at' (numb:enjs:format (~(get-number jo:json-utils j.i.acts) 'at' 0))]
       ==
     $(acts t.acts, rows [row rows], profs (~(put by profs) pk prof))
   $(ids t.ids, out (weld (flop rows) out), profs profs)
@@ -1230,9 +1230,9 @@
   |=  [=rail:tarball ev=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  =/  inner=(unit json)  (de:json:html (jstr ev 'content'))
+  =/  inner=(unit json)  (de:json:html (~(get-string jo:json-utils ev) 'content'))
   ?.  ?=([~ %o *] inner)  (pure:m ~)
-  =/  id=@t  (jstr u.inner 'id')
+  =/  id=@t  (~(get-string jo:json-utils u.inner) 'id')
   ?:  |(=('' id) =(~ (parse-hex:nl id)) !=(64 (met 3 id)))  (pure:m ~)
   =/  road=road:tarball  (nex-road:io rail [%& /events (cat 3 id '.json')])
   ;<  have=?  bind:m  (peek-exists:io road)
@@ -1250,16 +1250,16 @@
   |=  [=rail:tarball ev=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ?.  =(1 (jnum ev 'kind' 1))  (pure:m ~)
-  =/  id=@t  (jstr ev 'id')
-  =/  at=@ud  (jnum ev 'created_at' 0)
+  ?.  =(1 (~(get-number jo:json-utils ev) 'kind' 1))  (pure:m ~)
+  =/  id=@t  (~(get-string jo:json-utils ev) 'id')
+  =/  at=@ud  (~(get-number jo:json-utils ev) 'created_at' 0)
   =/  from-tags=(list @t)
     %+  murn  (tags ev)
     |=  l=(list @t)
     ?.  ?=([%t @ *] l)  ~
     (clean-tag i.t.l)
   =/  from-text=(list @t)
-    %+  murn  (content-words (jstr ev 'content'))
+    %+  murn  (content-words (~(get-string jo:json-utils ev) 'content'))
     |=  w=tape
     ?~  w  ~
     ?.  =('#' i.w)  ~
@@ -1270,8 +1270,8 @@
   =/  road=road:tarball  (nex-road:io rail [%& /tags (cat 3 i.ts '.json')])
   ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
   =/  have=(list [id=@t at=@ud])
-    %+  murn  (jarr (fall cur [%o ~]) 'posts')
-    |=(j=json ?.(?=([%o *] j) ~ `[(jstr j 'id') (jnum j 'at' 0)]))
+    %+  murn  (~(get-array jo:json-utils (fall cur [%o ~])) 'posts')
+    |=(j=json ?.(?=([%o *] j) ~ `[(~(get-string jo:json-utils j) 'id') (~(get-number jo:json-utils j) 'at' 0)]))
   ?:  (lien have |=([i=@t *] =(i id)))  $(ts t.ts)
   =/  next=(list [id=@t at=@ud])
     %+  scag  200
@@ -1336,19 +1336,19 @@
   |=  [=rail:tarball ev=json]
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
-  ?.  =(1 (jnum ev 'kind' 1))  (pure:m ~)
-  =/  pk=@t  (jstr ev 'pubkey')
-  =/  id=@t  (jstr ev 'id')
+  ?.  =(1 (~(get-number jo:json-utils ev) 'kind' 1))  (pure:m ~)
+  =/  pk=@t  (~(get-string jo:json-utils ev) 'pubkey')
+  =/  id=@t  (~(get-string jo:json-utils ev) 'id')
   ?:  |(=('' pk) =('' id))  (pure:m ~)
   =/  road=road:tarball  (nex-road:io rail [%& /authors (cat 3 pk '.json')])
   ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
   =/  have=(list [id=@t at=@ud])
-    %+  murn  (jarr (fall cur [%o ~]) 'posts')
-    |=(j=json ?.(?=([%o *] j) ~ `[(jstr j 'id') (jnum j 'at' 0)]))
+    %+  murn  (~(get-array jo:json-utils (fall cur [%o ~])) 'posts')
+    |=(j=json ?.(?=([%o *] j) ~ `[(~(get-string jo:json-utils j) 'id') (~(get-number jo:json-utils j) 'at' 0)]))
   ?:  (lien have |=([i=@t *] =(i id)))  (pure:m ~)
   =/  next=(list [id=@t at=@ud])
     %+  scag  200
-    %+  sort  [[id (jnum ev 'created_at' 0)] have]
+    %+  sort  [[id (~(get-number jo:json-utils ev) 'created_at' 0)] have]
     |=([a=[@t at=@ud] b=[@t at=@ud]] (gth at.a at.b))
   =/  doc=json
     %-  pairs:enjs:format
@@ -1372,7 +1372,7 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ?:  =('' pk)  (pure:m ~)
-  =/  prof=(unit json)  (de:json:html (jstr ev 'content'))
+  =/  prof=(unit json)  (de:json:html (~(get-string jo:json-utils ev) 'content'))
   ?.  ?=([~ %o *] prof)  (pure:m ~)
   =/  road=road:tarball  (nex-road:io rail [%& /profiles (cat 3 pk '.json')])
   ;<  cur=(unit json)  bind:m  (peek-as:io road ,json)
@@ -1392,9 +1392,9 @@
   ^-  form:m
   ;<  idx=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& / %'feed.json']) ,json)
   =/  j=json  (fall idx [%o ~])
-  =/  ids=(list @t)  (murn (jarr j 'ids') |=(i=json ?:(?=([%s *] i) `p.i ~)))
-  =/  times=(list @ud)  (turn (jarr j 'times') |=(t=json ?:(?=([%n *] t) (fall (rush p.t dem) 0) 0)))
-  =/  authors=(list @t)  (turn (jarr j 'authors') |=(a=json ?:(?=([%s *] a) p.a '')))
+  =/  ids=(list @t)  (murn (~(get-array jo:json-utils j) 'ids') |=(i=json ?:(?=([%s *] i) `p.i ~)))
+  =/  times=(list @ud)  (turn (~(get-array jo:json-utils j) 'times') |=(t=json ?:(?=([%n *] t) (fall (rush p.t dem) 0) 0)))
+  =/  authors=(list @t)  (turn (~(get-array jo:json-utils j) 'authors') |=(a=json ?:(?=([%s *] a) p.a '')))
   =|  out=feed-idx
   |-
   ?~  ids  (pure:m out)
@@ -1452,7 +1452,7 @@
     ;<  outbox=(list json)  bind:m  (read-outbox rail 200)
     =/  mine=(list json)
       ?~  cur  ~
-      (scag 50 (skim outbox |=(o=json =(u.cur (jstr (jget o 'event') 'pubkey')))))
+      (scag 50 (skim outbox |=(o=json =(u.cur (~(get-string jo:json-utils (~(get-object jo:json-utils o) 'event')) 'pubkey')))))
     %+  send-json  eyre-id
     %-  pairs:enjs:format
     :~  ['current' ?~(cur ~ s+u.cur)]
@@ -1480,14 +1480,14 @@
       ::  import: an nsec or 64-hex private key becomes an account
       [%api %me %import ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  priv=(unit @ux)  (parse-key:nl 'nsec' (jstr body 'key'))
+    =/  priv=(unit @ux)  (parse-key:nl 'nsec' (~(get-string jo:json-utils body) 'key'))
     ?~  priv  (reply eyre-id 400 'not an nsec or a 64-hex private key')
     ;<  pk=(unit @t)  bind:m  (add-account rail u.priv 0 [%o ~])
     (send-json eyre-id (pairs:enjs:format ~[['pubkey' ?~(pk ~ s+u.pk)]]))
   ::
       [%api %me %use ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  pk=@t  (jstr body 'pubkey')
+    =/  pk=@t  (~(get-string jo:json-utils body) 'pubkey')
     ;<  have=?  bind:m  (peek-exists:io (nex-road:io rail [%| (acct pk)]))
     ?.  have  (reply eyre-id 404 'no such account')
     ;<  ~  bind:m  (set-current rail pk)
@@ -1497,7 +1497,7 @@
       ::  was current, whichever account is left becomes current
       [%api %me %remove ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  pk=@t  (jstr body 'pubkey')
+    =/  pk=@t  (~(get-string jo:json-utils body) 'pubkey')
     ;<  *  bind:m  (cull-soft:io (nex-road:io rail [%| (acct pk)]))
     ;<  cur=(unit @t)  bind:m  (current-pk rail)
     ;<  ~  bind:m
@@ -1511,16 +1511,16 @@
       [%api %me %profile ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
     ;<  cur=(unit @t)  bind:m  (current-pk rail)
-    =/  want=@t  (jstr body 'pubkey')
+    =/  want=@t  (~(get-string jo:json-utils body) 'pubkey')
     =/  pk=(unit @t)  ?:(=('' want) cur `want)
     ?~  pk  (reply eyre-id 409 'no account: generate or import one first')
     ;<  have=?  bind:m  (peek-exists:io (nex-road:io rail [%| (acct u.pk)]))
     ?.  have  (reply eyre-id 404 'no such account')
     =/  prof=json
       %-  pairs:enjs:format
-      :~  ['name' s+(jstr body 'name')]
-          ['about' s+(jstr body 'about')]
-          ['picture' s+(jstr body 'picture')]
+      :~  ['name' s+(~(get-string jo:json-utils body) 'name')]
+          ['about' s+(~(get-string jo:json-utils body) 'about')]
+          ['picture' s+(~(get-string jo:json-utils body) 'picture')]
       ==
     ;<  ~  bind:m  (over:io (nex-road:io rail [%& (acct u.pk) %'profile.json']) [[/ %json] prof])
     ;<  id=(unit @t)  bind:m
@@ -1530,7 +1530,7 @@
   ::
       [%api %publish ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  content=@t  (jstr body 'content')
+    =/  content=@t  (~(get-string jo:json-utils body) 'content')
     ?:  =('' content)  (reply eyre-id 400 'empty')
     ;<  id=(unit @t)  bind:m  (publish rail 1 ~ content)
     ?~  id  (reply eyre-id 409 'no key: generate one first')
@@ -1553,8 +1553,8 @@
       [%api %follows ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
     ;<  cur=(list @t)  bind:m  (read-follows rail)
-    =/  action=@t  (jstr body 'action')
-    =/  pk=@t  (jstr body 'pubkey')
+    =/  action=@t  (~(get-string jo:json-utils body) 'action')
+    =/  pk=@t  (~(get-string jo:json-utils body) 'pubkey')
     ?:  ?&  !=('reset' action)
             |(?=(~ (parse-hex:nl pk)) !=(64 (met 3 pk)))
         ==
@@ -1571,8 +1571,8 @@
       ::  client), start (spawn it again), raw (a frame down its socket)
       [%api %relays %cmd ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  host=@t  (relay-host (jstr body 'host'))
-    =/  action=@t  (jstr body 'action')
+    =/  host=@t  (relay-host (~(get-string jo:json-utils body) 'host'))
+    =/  action=@t  (~(get-string jo:json-utils body) 'action')
     ?:  =('' host)  (reply eyre-id 400 'host')
     =/  sig=road:tarball  (nex-road:io rail [%& /relays (cat 3 host '.sig')])
     ?:  =('start' action)
@@ -1583,14 +1583,14 @@
     ?.  |(=('reconnect' action) =('stop' action) =('raw' action))
       (reply eyre-id 400 'action: reconnect | stop | start | raw')
     ;<  err=(unit tang)  bind:m
-      (poke-soft:io sig [/ %json] (pairs:enjs:format ~[['action' s+action] ['text' s+(jstr body 'text')]]))
+      (poke-soft:io sig [/ %json] (pairs:enjs:format ~[['action' s+action] ['text' s+(~(get-string jo:json-utils body) 'text')]]))
     (send-json eyre-id (pairs:enjs:format ~[['ok' b+?=(~ err)]]))
   ::
       [%api %relays ~]
     ?:  =('POST' method)
       ;<  cur=(list @t)  bind:m  (read-relays rail)
-      =/  action=@t  (jstr body 'action')
-      =/  url=@t  (jstr body 'url')
+      =/  action=@t  (~(get-string jo:json-utils body) 'action')
+      =/  url=@t  (~(get-string jo:json-utils body) 'url')
       ?:  &(=('' url) !=('reset' action))  (reply eyre-id 400 'url')
       =/  next=(list @t)
         ?:  =('reset' action)  default-relays
@@ -1605,7 +1605,7 @@
     %-  pairs:enjs:format
     :~  ['configured' [%a (turn configured |=(u=@t s+u))]]
         ['relays' [%a statuses]]
-        ['backfill_days' (numb:enjs:format (jnum cfg 'backfill_days' 30))]
+        ['backfill_days' (numb:enjs:format (~(get-number jo:json-utils cfg) 'backfill_days' 30))]
         ['is_default' b+=((sort configured aor) (sort default-relays aor))]
         ['defaults' [%a (turn default-relays |=(u=@t s+u))]]
     ==
@@ -1620,8 +1620,8 @@
     %-  pairs:enjs:format
     :~  ['events' (numb:enjs:format (count-files ev))]
         ['profiles' (numb:enjs:format (count-files pv))]
-        ['at' (numb:enjs:format (jnum (fall idx [%o ~]) 'at' 0))]
-        ['interval' (numb:enjs:format (jnum (fall cfg [%o ~]) 'interval' 120))]
+        ['at' (numb:enjs:format (~(get-number jo:json-utils (fall idx [%o ~])) 'at' 0))]
+        ['interval' (numb:enjs:format (~(get-number jo:json-utils (fall cfg [%o ~])) 'interval' 120))]
         ['relays' [%a relays]]
     ==
   ::
@@ -1648,8 +1648,8 @@
     =/  mine=(list json)
       %+  skim  posts
       |=  p=json
-      =/  rp=json  (jget p 'repost')
-      =/  by=@t  ?:(?=([%o *] rp) (jstr rp 'pubkey') (jstr p 'pubkey'))
+      =/  rp=json  (~(get-object jo:json-utils p) 'repost')
+      =/  by=@t  ?:(?=([%o *] rp) (~(get-string jo:json-utils rp) 'pubkey') (~(get-string jo:json-utils p) 'pubkey'))
       (~(has in fs) by)
     %+  send-json  eyre-id
     (pairs:enjs:format ~[['posts' [%a mine]] ['count' (numb:enjs:format (lent mine))] ['follows' (numb:enjs:format (lent follows))]])
@@ -1667,9 +1667,9 @@
     ;<  refs=json  bind:m  (read-refs rail root)
     =/  reply-ids=(list @t)
       %+  turn
-        %+  sort  (jarr refs 'replies')
-        |=([a=json b=json] (lth (jnum a 'at' 0) (jnum b 'at' 0)))
-      |=(j=json (jstr j 'id'))
+        %+  sort  (~(get-array jo:json-utils refs) 'replies')
+        |=([a=json b=json] (lth (~(get-number jo:json-utils a) 'at' 0) (~(get-number jo:json-utils b) 'at' 0)))
+      |=(j=json (~(get-string jo:json-utils j) 'id'))
     ;<  posts=(list json)  bind:m  (resolve rail [root reply-ids])
     ::  who reacted and reposted, on every post of the thread, named
     ;<  who=(list json)  bind:m  (engagement rail [root reply-ids])
@@ -1690,8 +1690,8 @@
     ;<  follows=(list @t)  bind:m  (read-follows rail)
     ;<  au=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /authors (cat 3 pk '.json')]) ,json)
     =/  ids=(list @t)
-      %+  murn  (scag 40 (jarr (fall au [%o ~]) 'posts'))
-      |=(j=json ?:(?=([%o *] j) `(jstr j 'id') ~))
+      %+  murn  (scag 40 (~(get-array jo:json-utils (fall au [%o ~])) 'posts'))
+      |=(j=json ?:(?=([%o *] j) `(~(get-string jo:json-utils j) 'id') ~))
     ;<  posts=(list json)  bind:m  (resolve rail ids)
     %+  send-json  eyre-id
     %-  pairs:enjs:format
@@ -1726,8 +1726,8 @@
       ?~  roots  (pure:m actors)
       ;<  refs=json  bind:m  (read-refs rail i.roots)
       =/  pks=(list @t)
-        %+  turn  (weld (jarr refs 'reposts') (jarr refs 'reactions'))
-        |=(j=json (jstr j 'pubkey'))
+        %+  turn  (weld (~(get-array jo:json-utils refs) 'reposts') (~(get-array jo:json-utils refs) 'reactions'))
+        |=(j=json (~(get-string jo:json-utils j) 'pubkey'))
       $(roots t.roots, actors (~(gas in actors) pks))
     =/  authors=(list @t)
       %+  scag  200
@@ -1747,7 +1747,7 @@
     =/  t=(unit @t)  (clean-tag (fall (~(get by (malt args)) 't') ''))
     ?~  t  (reply eyre-id 400 'tag')
     ;<  doc=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /tags (cat 3 u.t '.json')]) ,json)
-    =/  ids=(list @t)  (turn (jarr (fall doc [%o ~]) 'posts') |=(j=json (jstr j 'id')))
+    =/  ids=(list @t)  (turn (~(get-array jo:json-utils (fall doc [%o ~])) 'posts') |=(j=json (~(get-string jo:json-utils j) 'id')))
     ;<  posts=(list json)  bind:m  (resolve rail (scag 60 ids))
     (send-json eyre-id (pairs:enjs:format ~[['tag' s+u.t] ['posts' [%a posts]] ['count' (numb:enjs:format (lent ids))]]))
   ::
@@ -1767,7 +1767,7 @@
   ::
       [%api %fetch-tag ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  t=(unit @t)  (clean-tag (jstr body 'tag'))
+    =/  t=(unit @t)  (clean-tag (~(get-string jo:json-utils body) 'tag'))
     ?~  t  (reply eyre-id 400 'tag')
     ;<  ~  bind:m  (poke-relays rail (pairs:enjs:format ~[['action' s+'fetch-tag'] ['tag' s+u.t]]))
     (send-json eyre-id (pairs:enjs:format ~[['ok' b+&]]))
@@ -1783,7 +1783,7 @@
   ::
       [%api %fetch-person ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  pk=@t  (jstr body 'pubkey')
+    =/  pk=@t  (~(get-string jo:json-utils body) 'pubkey')
     ?~  (parse-hex:nl pk)  (reply eyre-id 400 'pubkey')
     ;<  ~  bind:m  (poke-relays rail (pairs:enjs:format ~[['action' s+'fetch-author'] ['pubkey' s+pk]]))
     (send-json eyre-id (pairs:enjs:format ~[['ok' b+&]]))
@@ -1792,7 +1792,7 @@
       ::  reposts, reactions, quotes) — a one-shot subscription per socket
       [%api %fetch ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  target=@t  (jstr body 'id')
+    =/  target=@t  (~(get-string jo:json-utils body) 'id')
     ?:  =('' target)  (reply eyre-id 400 'id')
     ;<  ~  bind:m  (poke-relays rail (pairs:enjs:format ~[['action' s+'fetch'] ['id' s+target]]))
     (send-json eyre-id (pairs:enjs:format ~[['ok' b+&]]))
@@ -1801,8 +1801,8 @@
       ::  the people in the conversation
       [%api %reply ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  parent-id=@t  (jstr body 'parent')
-    =/  content=@t  (jstr body 'content')
+    =/  parent-id=@t  (~(get-string jo:json-utils body) 'parent')
+    =/  content=@t  (~(get-string jo:json-utils body) 'content')
     ?:  |(=('' parent-id) =('' content))  (reply eyre-id 400 'parent and content')
     ;<  parent=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /events (cat 3 parent-id '.json')]) ,json)
     ?~  parent  (reply eyre-id 404 'no such event')
@@ -1810,7 +1810,7 @@
     =/  root=@t  ?~(er parent-id root.u.er)
     =/  people=(list @t)
       =/  ps=(list @t)  (murn (tags u.parent) |=(t=(list @t) ?.(?=([%p @ *] t) ~ `i.t.t)))
-      =/  author=@t  (jstr u.parent 'pubkey')
+      =/  author=@t  (~(get-string jo:json-utils u.parent) 'pubkey')
       ?:((lien ps |=(p=@t =(p author))) ps [author ps])
     =/  etags=(list (list @t))
       ?:  =(root parent-id)  ~[`(list @t)`~['e' root '' 'root']]
@@ -1823,12 +1823,12 @@
       ::  react: kind 7, content '+' or an emoji, e + p tags for the target
       [%api %react ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  target=@t  (jstr body 'id')
-    =/  content=@t  (jstr body 'content')
+    =/  target=@t  (~(get-string jo:json-utils body) 'id')
+    =/  content=@t  (~(get-string jo:json-utils body) 'content')
     ?:  =('' target)  (reply eyre-id 400 'id')
     ;<  ev=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /events (cat 3 target '.json')]) ,json)
     ?~  ev  (reply eyre-id 404 'no such event')
-    =/  tgs=(list (list @t))  ~[`(list @t)`~['e' target] `(list @t)`~['p' (jstr u.ev 'pubkey')]]
+    =/  tgs=(list (list @t))  ~[`(list @t)`~['e' target] `(list @t)`~['p' (~(get-string jo:json-utils u.ev) 'pubkey')]]
     ;<  id=(unit @t)  bind:m  (publish rail 7 tgs ?:(=('' content) '+' content))
     ?~  id  (reply eyre-id 409 'no key: generate one first')
     (send-json eyre-id (pairs:enjs:format ~[['id' s+u.id]]))
@@ -1837,11 +1837,11 @@
       ::  (NIP-18), tagged with the original's id and author
       [%api %repost ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  target=@t  (jstr body 'id')
+    =/  target=@t  (~(get-string jo:json-utils body) 'id')
     ?:  =('' target)  (reply eyre-id 400 'id')
     ;<  ev=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /events (cat 3 target '.json')]) ,json)
     ?~  ev  (reply eyre-id 404 'no such event')
-    =/  tgs=(list (list @t))  ~[`(list @t)`~['e' target] `(list @t)`~['p' (jstr u.ev 'pubkey')]]
+    =/  tgs=(list (list @t))  ~[`(list @t)`~['e' target] `(list @t)`~['p' (~(get-string jo:json-utils u.ev) 'pubkey')]]
     ;<  id=(unit @t)  bind:m  (publish rail 6 tgs (en:json:html u.ev))
     ?~  id  (reply eyre-id 409 'no key: generate one first')
     (send-json eyre-id (pairs:enjs:format ~[['id' s+u.id]]))
@@ -1851,14 +1851,14 @@
       ::  honor it or not; the event grub stays (the record)
       [%api %unreact ~]
     ?.  =('POST' method)  (reply eyre-id 405 'POST')
-    =/  rid=@t  (jstr body 'id')
+    =/  rid=@t  (~(get-string jo:json-utils body) 'id')
     ?:  =('' rid)  (reply eyre-id 400 'id')
     ;<  cur=(unit @t)  bind:m  (current-pk rail)
     ?~  cur  (reply eyre-id 409 'no account')
     ;<  ev=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /events (cat 3 rid '.json')]) ,json)
     ?~  ev  (reply eyre-id 404 'no such event')
-    ?.  =(u.cur (jstr u.ev 'pubkey'))  (reply eyre-id 403 'not ours')
-    ?.  =(7 (jnum u.ev 'kind' 1))  (reply eyre-id 400 'not a reaction')
+    ?.  =(u.cur (~(get-string jo:json-utils u.ev) 'pubkey'))  (reply eyre-id 403 'not ours')
+    ?.  =(7 (~(get-number jo:json-utils u.ev) 'kind' 1))  (reply eyre-id 400 'not a reaction')
     =/  tgs=(list (list @t))  ~[`(list @t)`~['e' rid] `(list @t)`~['k' '7']]
     ;<  id=(unit @t)  bind:m  (publish rail 5 tgs '')
     ?~  id  (reply eyre-id 409 'no key')
@@ -1882,7 +1882,7 @@
     (peek-as:io (nex-road:io rail [%& /profiles (cat 3 pk '.json')]) ,json)
   =/  prof=json  (fall p [%o ~])
   %-  pure:m
-  (pairs:enjs:format ~[['name' s+(jstr prof 'name')] ['picture' s+(jstr prof 'picture')] ['about' s+(jstr prof 'about')]])
+  (pairs:enjs:format ~[['name' s+(~(get-string jo:json-utils prof) 'name')] ['picture' s+(~(get-string jo:json-utils prof) 'picture')] ['about' s+(~(get-string jo:json-utils prof) 'about')]])
 ::  +resolve: ids -> events joined with their author's profile
 ++  resolve
   |=  [=rail:tarball ids=(list @t)]
@@ -1900,13 +1900,13 @@
   ::  a repost (kind 6) shows as the ORIGINAL post, with who reposted it
   ::  and when; the original is held (store-embedded) or we skip it
   ;<  repost=json  bind:m
-    ?.  =(6 (jnum u.ev 'kind' 1))  (pure:(fiber:fiber:nexus ,json) ~)
-    ;<  rp=json  bind:(fiber:fiber:nexus ,json)  (slim-prof rail (jstr u.ev 'pubkey'))
+    ?.  =(6 (~(get-number jo:json-utils u.ev) 'kind' 1))  (pure:(fiber:fiber:nexus ,json) ~)
+    ;<  rp=json  bind:(fiber:fiber:nexus ,json)  (slim-prof rail (~(get-string jo:json-utils u.ev) 'pubkey'))
     %-  pure:(fiber:fiber:nexus ,json)
     %-  pairs:enjs:format
-    :~  ['id' s+(jstr u.ev 'id')]  ['pubkey' s+(jstr u.ev 'pubkey')]
-        ['name' s+(jstr rp 'name')]  ['picture' s+(jstr rp 'picture')]
-        ['at' (numb:enjs:format (jnum u.ev 'created_at' 0))]
+    :~  ['id' s+(~(get-string jo:json-utils u.ev) 'id')]  ['pubkey' s+(~(get-string jo:json-utils u.ev) 'pubkey')]
+        ['name' s+(~(get-string jo:json-utils rp) 'name')]  ['picture' s+(~(get-string jo:json-utils rp) 'picture')]
+        ['at' (numb:enjs:format (~(get-number jo:json-utils u.ev) 'created_at' 0))]
     ==
   ;<  ev=(unit json)  bind:m
     ?~  repost  (pure:(fiber:fiber:nexus ,(unit json)) ev)
@@ -1915,15 +1915,15 @@
     (peek-as:io (nex-road:io rail [%& /events (cat 3 target '.json')]) ,json)
   ?~  ev  $(ids t.ids)
   ?.  ?=([%o *] u.ev)  $(ids t.ids)
-  =/  oid=@t  (jstr u.ev 'id')
-  =/  pk=@t  (jstr u.ev 'pubkey')
+  =/  oid=@t  (~(get-string jo:json-utils u.ev) 'id')
+  =/  pk=@t  (~(get-string jo:json-utils u.ev) 'pubkey')
   ;<  prof=json  bind:m
     ?^  hit=(~(get by profs) pk)  (pure:(fiber:fiber:nexus ,json) u.hit)
     ;<  p=(unit json)  bind:(fiber:fiber:nexus ,json)
       (peek-as:io (nex-road:io rail [%& /profiles (cat 3 pk '.json')]) ,json)
     (pure:(fiber:fiber:nexus ,json) (fall p [%o ~]))
   =/  slim=json
-    (pairs:enjs:format ~[['name' s+(jstr prof 'name')] ['picture' s+(jstr prof 'picture')] ['about' s+(jstr prof 'about')]])
+    (pairs:enjs:format ~[['name' s+(~(get-string jo:json-utils prof) 'name')] ['picture' s+(~(get-string jo:json-utils prof) 'picture')] ['about' s+(~(get-string jo:json-utils prof) 'about')]])
   ::  what this post answers, and what points at it
   =/  er=(unit [root=@t parent=@t])  (e-refs u.ev)
   =/  root=@t  ?~(er oid root.u.er)
@@ -1932,12 +1932,12 @@
     ?:  =(root oid)  (pure:(fiber:fiber:nexus ,json) own)
     (read-refs rail root)
   =/  replies=@ud
-    (lent (skim (jarr thread 'replies') |=(j=json =((jstr j 'parent') oid))))
-  =/  reactions=(list json)  (jarr own 'reactions')
+    (lent (skim (~(get-array jo:json-utils thread) 'replies') |=(j=json =((~(get-string jo:json-utils j) 'parent') oid))))
+  =/  reactions=(list json)  (~(get-array jo:json-utils own) 'reactions')
   =/  by-emoji=(map @t @ud)
     %+  roll  reactions
     |=  [r=json acc=(map @t @ud)]
-    =/  c=@t  (jstr r 'content')
+    =/  c=@t  (~(get-string jo:json-utils r) 'content')
     =/  c=@t  ?:(|(=('' c) =('+' c)) '+' c)
     (~(put by acc) c +((~(gut by acc) c 0)))
   ::  the current account's own reactions, emoji -> reaction id (for
@@ -1946,9 +1946,9 @@
     ?~  cur  ~
     %+  murn  reactions
     |=  r=json
-    ?.  =(u.cur (jstr r 'pubkey'))  ~
-    =/  c=@t  (jstr r 'content')
-    `[?:(|(=('' c) =('+' c)) '+' c) s+(jstr r 'id')]
+    ?.  =(u.cur (~(get-string jo:json-utils r) 'pubkey'))  ~
+    =/  c=@t  (~(get-string jo:json-utils r) 'content')
+    `[?:(|(=('' c) =('+' c)) '+' c) s+(~(get-string jo:json-utils r) 'id')]
   =/  post=json
     %-  pairs:enjs:format
     %+  weld  `(list [@t json])`~(tap by p.u.ev)
@@ -1959,7 +1959,7 @@
         :-  'counts'
         %-  pairs:enjs:format
         :~  ['replies' (numb:enjs:format replies)]
-            ['reposts' (numb:enjs:format (lent (jarr own 'reposts')))]
+            ['reposts' (numb:enjs:format (lent (~(get-array jo:json-utils own) 'reposts')))]
             ['reactions' (numb:enjs:format (lent reactions))]
         ==
         ['reactions' [%o (~(run by by-emoji) numb:enjs:format)]]
@@ -2002,11 +2002,11 @@
     %-  pairs:enjs:format
     :~  ['pubkey' s+i.pks]
         ['npub' s+?~(h=(parse-hex:nl i.pks) '' (npub:nl u.h))]
-        ['name' s+(jstr p 'name')]
-        ['display_name' s+(jstr p 'display_name')]
-        ['about' s+(jstr p 'about')]
-        ['picture' s+(jstr p 'picture')]
-        ['nip05' s+(jstr p 'nip05')]
+        ['name' s+(~(get-string jo:json-utils p) 'name')]
+        ['display_name' s+(~(get-string jo:json-utils p) 'display_name')]
+        ['about' s+(~(get-string jo:json-utils p) 'about')]
+        ['picture' s+(~(get-string jo:json-utils p) 'picture')]
+        ['nip05' s+(~(get-string jo:json-utils p) 'nip05')]
         ['known' b+?=(^ prof)]
     ==
   $(pks t.pks, out [row out])
@@ -2026,7 +2026,7 @@
     %-  pure:m
     %+  scag  limit
     %+  sort  out
-    |=([a=json b=json] (gth (jnum a 'at' 0) (jnum b 'at' 0)))
+    |=([a=json b=json] (gth (~(get-number jo:json-utils a) 'at' 0) (~(get-number jo:json-utils b) 'at' 0)))
   ;<  j=(unit json)  bind:m  (peek-as:io (nex-road:io rail [%& /outbox i.names]) ,json)
   $(names t.names, out ?~(j out [u.j out]))
 ::  +relay-statuses: every relays/<host>.json, as written by the clients
@@ -2054,55 +2054,4 @@
   ?.  ?=([%ball *] view)  0
   ?~  fil.ball.view  0
   ~(wyt by contents.u.fil.ball.view)
-::
-::  +jstrs: a key's array of strings
-++  jstrs
-  |=  [j=json k=@t]
-  ^-  (list @t)
-  (murn (jarr j k) |=(x=json ?:(?=([%s *] x) `p.x ~)))
-++  jstr
-  |=  [j=json k=@t]
-  ^-  @t
-  ?.  ?=([%o *] j)  ''
-  =/  v  (~(get by p.j) k)
-  ?:(?=([~ %s *] v) p.u.v '')
-++  jget
-  |=  [j=json k=@t]
-  ^-  json
-  ?.  ?=([%o *] j)  [%o ~]
-  (fall (~(get by p.j) k) [%o ~])
-++  jarr
-  |=  [j=json k=@t]
-  ^-  (list json)
-  ?.  ?=([%o *] j)  ~
-  =/  v  (~(get by p.j) k)
-  ?.(?=([~ %a *] v) ~ p.u.v)
-++  jvals
-  |=  j=json
-  ^-  (list json)
-  ?.(?=([%o *] j) ~ (turn ~(tap by p.j) |=([* v=json] v)))
-++  jstr-at
-  |=  [l=(list json) i=@ud]
-  ^-  @t
-  =/  v  (snag-soft l i)
-  ?:(?=([~ %s *] v) p.u.v '')
-++  jbool-at
-  |=  [l=(list json) i=@ud]
-  ^-  ?
-  =/  v  (snag-soft l i)
-  ?:(?=([~ %b *] v) p.u.v |)
-++  snag-soft
-  |=  [l=(list json) i=@ud]
-  ^-  (unit json)
-  ?:  (gte i (lent l))  ~
-  `(snag i l)
-++  jnum
-  |=  [j=json k=@t def=@ud]
-  ^-  @ud
-  ?.  ?=([%o *] j)  def
-  =/  v  (~(get by p.j) k)
-  ?~  v  def
-  ?:  ?=([%n *] u.v)  (fall (rush p.u.v dem) def)
-  ?:  ?=([%s *] u.v)  (fall (rush p.u.v dem) def)
-  def
 --

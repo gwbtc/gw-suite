@@ -164,8 +164,8 @@
   =/  grant-road=road:tarball  (nex-road:io rail [%& / %'grant.json'])
   |-
   ;<  conf=json  bind:m  (read-json conf-road)
-  =/  net=network  (net-of (jstr conf 'network'))
-  =/  lookback=@ud  (fall (jnum conf 'lookback') 1.008)
+  =/  net=network  (net-of (~(get-string jo:json-utils conf) 'network'))
+  =/  lookback=@ud  (~(get-number jo:json-utils conf) 'lookback' 1.008)
   ;<  where=(unit path)  bind:m  (esplora-base grant-road)
   ?~  where
     ;<  ~  bind:m  (note stat-road net 'waiting for @esplora to be granted')
@@ -225,17 +225,17 @@
   ^-  (each spv-chain @t)
   ?~  rows  &+c
   =/  j=json  i.rows
-  =/  height=@ud  (fall (jnum j 'height') 0)
+  =/  height=@ud  (~(get-number jo:json-utils j) 'height' 0)
   =/  hed=(unit block-header:spv)
     %:  header-from-fields:spv
       height
-      (jstr j 'id')
-      (fall (jnum j 'version') 0)
-      (jstr j 'previousblockhash')
-      (jstr j 'merkle_root')
-      (fall (jnum j 'timestamp') 0)
-      (fall (jnum j 'bits') 0)
-      (fall (jnum j 'nonce') 0)
+      (~(get-string jo:json-utils j) 'id')
+      (~(get-number jo:json-utils j) 'version' 0)
+      (~(get-string jo:json-utils j) 'previousblockhash')
+      (~(get-string jo:json-utils j) 'merkle_root')
+      (~(get-number jo:json-utils j) 'timestamp' 0)
+      (~(get-number jo:json-utils j) 'bits' 0)
+      (~(get-number jo:json-utils j) 'nonce' 0)
     ==
   ?~  hed
     |+(crip "block {(a-co:co height)}: fields do not hash to the id given for them")
@@ -244,9 +244,9 @@
   ::  agree, which is the check that catches a byte-order mistake on
   ::  the first block instead of never: a wrong `bits` does not break
   ::  anything visibly, it just quietly makes proof of work meaningless.
-  =/  said-bits=@ud  (fall (jnum j 'bits') 0)
-  =/  said-time=@ud  (fall (jnum j 'timestamp') 0)
-  =/  said-nonce=@ud  (fall (jnum j 'nonce') 0)
+  =/  said-bits=@ud  (~(get-number jo:json-utils j) 'bits' 0)
+  =/  said-time=@ud  (~(get-number jo:json-utils j) 'timestamp' 0)
+  =/  said-nonce=@ud  (~(get-number jo:json-utils j) 'nonce' 0)
   ?.  =(said-bits `@ud`bits.u.hed)
     |+(crip "block {(a-co:co height)}: we read difficulty {(a-co:co `@ud`bits.u.hed)} where the chain service says {(a-co:co said-bits)}")
   ?.  =(said-time timestamp.u.hed)
@@ -278,8 +278,8 @@
     ~&  >>>  [%spv-unrecognized-poke mark=p.sage from=from]
     $
   =/  jon=json  (fall (mole |.(!<(json q.sage))) *json)
-  =/  id=@t  (jstr jon 'id')
-  =/  req=(unit json)  (junit jon 'req')
+  =/  id=@t  (~(get-string jo:json-utils jon) 'id')
+  =/  req=(unit json)  (~(get-field jo:json-utils jon) 'req')
   ?:  |(=('' id) ?=(~ req))
     ~&  >>>  "%spv: poke missing id or req"
     $
@@ -287,7 +287,7 @@
   ::  when what counts as verified changes, every conclusion drawn under
   ::  the old rule is void, and keeping it would be claiming work that
   ::  was never done.
-  ?:  =('reset' (jstr (fall (junit jon 'req') [%o ~]) 'op'))
+  ?:  =('reset' (~(get-string jo:json-utils (~(get-object jo:json-utils jon) 'req')) 'op'))
     ::  './' -- our OWN directory. main.sig sits at the nexus root, so
     ::  [%| 1 ...] from here points at the desk above us, not at us.
     ;<  ~  bind:m
@@ -323,21 +323,21 @@
   =/  m  (fiber:fiber:nexus ,~)
   ^-  form:m
   ;<  own=json  bind:m  (get-state-as:io ,json)
-  ?.  =('pending' (jstr own 'status'))  stay:m
-  =/  req=json  (fall (junit own 'request') [%o ~])
-  =/  txid=@t  (jstr req 'txid')
+  ?.  =('pending' (~(get-string jo:json-utils own) 'status'))  stay:m
+  =/  req=json  (~(get-object jo:json-utils own) 'request')
+  =/  txid=@t  (~(get-string jo:json-utils req) 'txid')
   ?:  =('' txid)  (answer req %.n 'no txid given' ~)
   ;<  conf=json  bind:m  (read-json (nex-road:io rail [%& / %'config.json']))
-  =/  net=network  (net-of (jstr conf 'network'))
+  =/  net=network  (net-of (~(get-string jo:json-utils conf) 'network'))
   ;<  where=(unit path)  bind:m
     (esplora-base (nex-road:io rail [%& / %'grant.json']))
   ?~  where  (answer req %.n 'no road to the chain service' ~)
   ;<  proof=json  bind:m  (ask-body u.where (merkle:question:esp net txid))
   ?.  ?=([%o *] proof)  (answer req %.n 'the chain service has no proof for it' ~)
-  =/  height=@ud  (fall (jnum proof 'block_height') 0)
-  =/  pos=@ud  (fall (jnum proof 'pos') 0)
+  =/  height=@ud  (~(get-number jo:json-utils proof) 'block_height' 0)
+  =/  pos=@ud  (~(get-number jo:json-utils proof) 'pos' 0)
   =/  branch=(list @t)
-    =/  br=(unit json)  (junit proof 'merkle')
+    =/  br=(unit json)  (~(get-field jo:json-utils proof) 'merkle')
     ?.  ?=([~ %a *] br)  ~
     (murn p.u.br |=(j=json ?:(?=([%s *] j) `p.j ~)))
   ;<  chains=(map network spv-chain)  bind:m
@@ -424,7 +424,7 @@
   =/  asc=(list json)  (flop rows)
   |-  ^-  (list json)
   ?~  asc  ~
-  ?:  (gth (fall (jnum i.asc 'height') 0) have)
+  ?:  (gth (~(get-number jo:json-utils i.asc) 'height' 0) have)
     [i.asc $(asc t.asc)]
   $(asc t.asc)
 ::  +highest: the top of what we hold, or the checkpoint
@@ -568,23 +568,6 @@
     %regtest  %regtest
   ==
 ::
-::  jstr is nexus-web's, which answers a STRING or ''. A field that is
-::  an object or an array needs the unit, and reaching for jget there
-::  hands `fall` something that is not a unit at all.
-::
-++  jstr  jget:nw
-++  junit
-  |=  [j=json k=@t]
-  ^-  (unit json)
-  ?.  ?=([%o *] j)  ~
-  (~(get by p.j) k)
-++  jnum
-  |=  [j=json k=@t]
-  ^-  (unit @ud)
-  ?.  ?=([%o *] j)  ~
-  =/  v  (~(get by p.j) k)
-  ?.  ?=([~ %n *] v)  ~
-  (rush p.u.v dem)
 ::  +serve: the status page.
 ::
 ::  +serve: the status page.
@@ -627,11 +610,10 @@
     ?~  body  (reply:web:nw eyre-id 400 'json body required')
     ;<  cur=json  bind:m  (read-json [%& %& root %'config.json'])
     =/  net=@t
-      =/  g=@t  (jstr (fall body [%o ~]) 'network')
-      ?:(=('' g) (jstr cur 'network') g)
+      =/  g=@t  (~(get-string jo:json-utils (fall body [%o ~])) 'network')
+      ?:(=('' g) (~(get-string jo:json-utils cur) 'network') g)
     =/  look=@ud
-      =/  g=(unit @ud)  (jnum (fall body [%o ~]) 'lookback')
-      ?^(g u.g (fall (jnum cur 'lookback') 1.008))
+      (~(get-number jo:json-utils (fall body [%o ~])) 'lookback' (~(get-number jo:json-utils cur) 'lookback' 1.008))
     ;<  ~  bind:m
       %+  put:io  [%& %& root %'config.json']
       :-  [/ %json]
@@ -661,7 +643,7 @@
       =/  p  (get-key:kv:html-utils 'page' args)
       ?~(p 0 (fall (rush u.p dem) 0))
     ;<  conf=json  bind:m  (read-json [%& %& root %'config.json'])
-    =/  net=network  (net-of (jstr conf 'network'))
+    =/  net=network  (net-of (~(get-string jo:json-utils conf) 'network'))
     ;<  chains=(map network spv-chain)  bind:m
       (read-chain [%& %& root %'chain.spv_chain'])
     =/  c=spv-chain  (fall (~(get by chains) net) *spv-chain)
@@ -679,7 +661,7 @@
     ;<  st=json  bind:m  (read-json [%& %& root %'status.json'])
     ;<  chains=(map network spv-chain)  bind:m
       (read-chain [%& %& root %'chain.spv_chain'])
-    =/  net=network  (net-of (jstr conf 'network'))
+    =/  net=network  (net-of (~(get-string jo:json-utils conf) 'network'))
     =/  c=spv-chain  (fall (~(get by chains) net) *spv-chain)
     %+  send-json:web:nw  eyre-id
     %-  pairs:enjs:format
